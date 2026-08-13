@@ -12,26 +12,6 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/db"
 )
 
-// fakeQuerier implements db.Querier with only GetUserByEmail wired up,
-// since that's all PasswordAuthenticator calls. The other methods panic if
-// invoked, so an unexpected call fails the test loudly instead of silently
-// returning a zero value.
-type fakeQuerier struct {
-	getUserByEmail func(ctx context.Context, email string) (db.User, error)
-}
-
-func (f *fakeQuerier) CreateUser(ctx context.Context, arg db.CreateUserParams) (db.User, error) {
-	panic("fakeQuerier: CreateUser not implemented")
-}
-
-func (f *fakeQuerier) GetUserByEmail(ctx context.Context, email string) (db.User, error) {
-	return f.getUserByEmail(ctx, email)
-}
-
-func (f *fakeQuerier) GetUserByID(ctx context.Context, id int64) (db.User, error) {
-	panic("fakeQuerier: GetUserByID not implemented")
-}
-
 func mustHash(t *testing.T, password string) string {
 	t.Helper()
 	hash, err := HashPassword(password)

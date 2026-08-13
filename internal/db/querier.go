@@ -9,9 +9,13 @@ import (
 )
 
 type Querier interface {
+	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	RevokeSession(ctx context.Context, tokenHash []byte) error
+	TouchSessionLastSeen(ctx context.Context, id int64) error
 }
 
 var _ Querier = (*Queries)(nil)
