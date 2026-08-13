@@ -29,6 +29,16 @@ func run() error {
 	}
 	command, commandArgs := args[0], args[1:]
 
+	if err := goose.SetDialect("postgres"); err != nil {
+		return fmt.Errorf("set dialect: %w", err)
+	}
+
+	// "create" only scaffolds a local file and never touches the database,
+	// so it shouldn't require DATABASE_URL to be set.
+	if command == "create" {
+		return goose.RunContext(context.Background(), command, nil, *dir, commandArgs...)
+	}
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return fmt.Errorf("DATABASE_URL environment variable is required")
@@ -39,10 +49,6 @@ func run() error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		return fmt.Errorf("set dialect: %w", err)
-	}
 
 	return goose.RunContext(context.Background(), command, db, *dir, commandArgs...)
 }
