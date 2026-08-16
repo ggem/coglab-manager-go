@@ -12,19 +12,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
 )
 
 func TestSessionManager_IssueAndValidate(t *testing.T) {
 	var capturedParams db.CreateSessionParams
 	var storedSession db.Session
 
-	q := &fakeQuerier{
-		createSession: func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
+	q := &dbfake.Querier{
+		CreateSessionFunc: func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
 			capturedParams = arg
 			storedSession = db.Session{ID: 42, TokenHash: arg.TokenHash, UserID: arg.UserID, ExpiresAt: arg.ExpiresAt}
 			return storedSession, nil
 		},
-		getSessionByTokenHash: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
+		GetSessionByTokenHashFunc: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
 			if string(tokenHash) != string(storedSession.TokenHash) {
 				t.Fatalf("GetSessionByTokenHash called with unexpected hash")
 			}
@@ -77,8 +78,8 @@ func TestSessionManager_IssueAndValidate(t *testing.T) {
 }
 
 func TestSessionManager_Issue_SecureCookieWhenConfigured(t *testing.T) {
-	q := &fakeQuerier{
-		createSession: func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
+	q := &dbfake.Querier{
+		CreateSessionFunc: func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
 			return db.Session{ID: 1, TokenHash: arg.TokenHash, UserID: arg.UserID}, nil
 		},
 	}
@@ -97,7 +98,7 @@ func TestSessionManager_Issue_SecureCookieWhenConfigured(t *testing.T) {
 }
 
 func TestSessionManager_Validate_NoCookie(t *testing.T) {
-	mgr := NewSessionManager(&fakeQuerier{}, false)
+	mgr := NewSessionManager(&dbfake.Querier{}, false)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	if _, err := mgr.Validate(context.Background(), req); !errors.Is(err, ErrSessionNotFound) {
@@ -106,8 +107,8 @@ func TestSessionManager_Validate_NoCookie(t *testing.T) {
 }
 
 func TestSessionManager_Validate_UnknownToken(t *testing.T) {
-	q := &fakeQuerier{
-		getSessionByTokenHash: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
+	q := &dbfake.Querier{
+		GetSessionByTokenHashFunc: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
 			return db.Session{}, pgx.ErrNoRows
 		},
 	}
@@ -122,8 +123,8 @@ func TestSessionManager_Validate_UnknownToken(t *testing.T) {
 }
 
 func TestSessionManager_Validate_Revoked(t *testing.T) {
-	q := &fakeQuerier{
-		getSessionByTokenHash: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
+	q := &dbfake.Querier{
+		GetSessionByTokenHashFunc: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
 			return db.Session{RevokedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
 		},
 	}
@@ -138,8 +139,8 @@ func TestSessionManager_Validate_Revoked(t *testing.T) {
 }
 
 func TestSessionManager_Validate_Expired(t *testing.T) {
-	q := &fakeQuerier{
-		getSessionByTokenHash: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
+	q := &dbfake.Querier{
+		GetSessionByTokenHashFunc: func(ctx context.Context, tokenHash []byte) (db.Session, error) {
 			return db.Session{ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}}, nil
 		},
 	}
@@ -155,8 +156,8 @@ func TestSessionManager_Validate_Expired(t *testing.T) {
 
 func TestSessionManager_Revoke(t *testing.T) {
 	var revokedHash []byte
-	q := &fakeQuerier{
-		revokeSession: func(ctx context.Context, tokenHash []byte) error {
+	q := &dbfake.Querier{
+		RevokeSessionFunc: func(ctx context.Context, tokenHash []byte) error {
 			revokedHash = tokenHash
 			return nil
 		},
@@ -188,7 +189,7 @@ func TestSessionManager_Revoke(t *testing.T) {
 }
 
 func TestSessionManager_Revoke_NoCookie(t *testing.T) {
-	mgr := NewSessionManager(&fakeQuerier{}, false)
+	mgr := NewSessionManager(&dbfake.Querier{}, false)
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	rec := httptest.NewRecorder()
 

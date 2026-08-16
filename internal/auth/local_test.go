@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
 )
 
 func mustHash(t *testing.T, password string) string {
@@ -23,8 +24,8 @@ func mustHash(t *testing.T, password string) string {
 
 func TestPasswordAuthenticator_Authenticate_Success(t *testing.T) {
 	hash := mustHash(t, "s3cret")
-	q := &fakeQuerier{
-		getUserByEmail: func(ctx context.Context, email string) (db.User, error) {
+	q := &dbfake.Querier{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (db.User, error) {
 			return db.User{
 				ID:           1,
 				Email:        "researcher@example.edu",
@@ -40,7 +41,7 @@ func TestPasswordAuthenticator_Authenticate_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate: %v", err)
 	}
-	want := Identity{Email: "researcher@example.edu", FirstName: "Ada", LastName: "Lovelace"}
+	want := Identity{UserID: 1, Email: "researcher@example.edu", FirstName: "Ada", LastName: "Lovelace"}
 	if got != want {
 		t.Errorf("Authenticate() = %+v, want %+v", got, want)
 	}
@@ -48,8 +49,8 @@ func TestPasswordAuthenticator_Authenticate_Success(t *testing.T) {
 
 func TestPasswordAuthenticator_Authenticate_WrongPassword(t *testing.T) {
 	hash := mustHash(t, "s3cret")
-	q := &fakeQuerier{
-		getUserByEmail: func(ctx context.Context, email string) (db.User, error) {
+	q := &dbfake.Querier{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (db.User, error) {
 			return db.User{Email: "researcher@example.edu", PasswordHash: &hash}, nil
 		},
 	}
@@ -62,8 +63,8 @@ func TestPasswordAuthenticator_Authenticate_WrongPassword(t *testing.T) {
 }
 
 func TestPasswordAuthenticator_Authenticate_UnknownEmail(t *testing.T) {
-	q := &fakeQuerier{
-		getUserByEmail: func(ctx context.Context, email string) (db.User, error) {
+	q := &dbfake.Querier{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (db.User, error) {
 			return db.User{}, pgx.ErrNoRows
 		},
 	}
@@ -77,8 +78,8 @@ func TestPasswordAuthenticator_Authenticate_UnknownEmail(t *testing.T) {
 
 func TestPasswordAuthenticator_Authenticate_Deactivated(t *testing.T) {
 	hash := mustHash(t, "s3cret")
-	q := &fakeQuerier{
-		getUserByEmail: func(ctx context.Context, email string) (db.User, error) {
+	q := &dbfake.Querier{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (db.User, error) {
 			return db.User{
 				Email:         "former-staff@example.edu",
 				PasswordHash:  &hash,
@@ -95,8 +96,8 @@ func TestPasswordAuthenticator_Authenticate_Deactivated(t *testing.T) {
 }
 
 func TestPasswordAuthenticator_Authenticate_SSOOnlyAccount(t *testing.T) {
-	q := &fakeQuerier{
-		getUserByEmail: func(ctx context.Context, email string) (db.User, error) {
+	q := &dbfake.Querier{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (db.User, error) {
 			return db.User{Email: "sso-user@example.edu", PasswordHash: nil}, nil
 		},
 	}

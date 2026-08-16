@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)

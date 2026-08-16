@@ -25,6 +25,7 @@ var (
 // Identity is what an authentication method resolves a set of credentials
 // to, independent of how that resolution happened.
 type Identity struct {
+	UserID    int64
 	Email     string
 	FirstName string
 	LastName  string
@@ -90,6 +91,7 @@ func (a *PasswordAuthenticator) Authenticate(ctx context.Context, email, passwor
 	}
 
 	return Identity{
+		UserID:    user.ID,
 		Email:     user.Email,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
