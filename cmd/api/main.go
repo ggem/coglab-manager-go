@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,7 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ggem/coglab-manager-go/internal/audit"
+	"github.com/ggem/coglab-manager-go/internal/auth"
+	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/httpapi"
 )
 
 func main() {
@@ -23,14 +29,37 @@ func main() {
 func run() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	srv := &http.Server{
-		Addr:              addr(),
-		Handler:           newRouter(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return fmt.Errorf("DATABASE_URL environment variable is required")
+	}
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return fmt.Errorf("create connection pool: %w", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("connect to database: %w", err)
+	}
+
+	queries := db.New(pool)
+	server := httpapi.NewServer(
+		auth.NewPasswordAuthenticator(queries),
+		auth.NewSessionManager(queries, secureCookies()),
+		audit.NewRecorder(queries),
+		logger,
+	)
+
+	srv := &http.Server{
+		Addr:              addr(),
+		Handler:           server.Routes(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -53,21 +82,16 @@ func run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-func newRouter() http.Handler {
-	r := chi.NewRouter()
-	r.Get("/healthz", handleHealthz)
-	return r
-}
-
-func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
-}
-
 func addr() string {
 	if a := os.Getenv("HTTP_ADDR"); a != "" {
 		return a
 	}
 	return ":8080"
+}
+
+// secureCookies reports whether the session cookie should be marked Secure
+// (HTTPS-only). Defaults to true; set SECURE_COOKIES=false for local
+// development over plain HTTP.
+func secureCookies() bool {
+	return os.Getenv("SECURE_COOKIES") != "false"
 }
