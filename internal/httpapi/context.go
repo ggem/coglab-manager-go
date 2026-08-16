@@ -1,0 +1,25 @@
+package httpapi
+
+import (
+	"context"
+
+	"github.com/ggem/coglab-manager-go/internal/db"
+)
+
+// contextKey is an unexported type so values this package stores in a
+// request context can't collide with keys set by other packages, even if
+// they also happen to use a string or int as their key type.
+type contextKey int
+
+const sessionContextKey contextKey = iota
+
+func withSession(ctx context.Context, session db.Session) context.Context {
+	return context.WithValue(ctx, sessionContextKey, session)
+}
+
+// sessionFromContext returns the session attached to ctx by requireAuth, if
+// any. ok is false for requests that never passed through requireAuth.
+func sessionFromContext(ctx context.Context) (session db.Session, ok bool) {
+	session, ok = ctx.Value(sessionContextKey).(db.Session)
+	return session, ok
+}
