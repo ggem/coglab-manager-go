@@ -30,6 +30,19 @@ type Querier interface {
 	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
 	RevokeSession(ctx context.Context, tokenHash []byte) error
+	// Every filter is optional (sqlc.narg(x) is null or ...); passing none
+	// returns every child (subject to include_deactivated/limit_count).
+	//
+	// Name matching uses pg_trgm's word_similarity rather than plain
+	// similarity() or ILIKE: word_similarity scores how well the query matches
+	// *part of* the field, so a short query like "jhon" can still match
+	// "Johnathan" -- plain similarity() compares the whole strings and craters
+	// when they're very different lengths, and ILIKE only catches exact
+	// substrings, not typos. The 0.2 threshold is a literal in the query
+	// rather than the pg_trgm.similarity_threshold GUC (the %/<% operators'
+	// default is 0.3, too strict for short name fields, and overriding a GUC
+	// per-query risks leaking to the next query on a pooled connection).
+	SearchChildren(ctx context.Context, arg SearchChildrenParams) ([]Child, error)
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)

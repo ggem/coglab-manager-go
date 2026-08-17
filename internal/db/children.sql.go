@@ -218,6 +218,112 @@ func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]C
 	return items, nil
 }
 
+const searchChildren = `-- name: SearchChildren :many
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at
+from children
+where
+    ($1::text is null
+        or word_similarity($1, first_name) > 0.2
+        or word_similarity($1, last_name) > 0.2)
+    and ($2::date is null or birth_date >= $2)
+    and ($3::date is null or birth_date <= $3)
+    and ($4::text is null or sex = $4)
+    and ($5::boolean is null or twin = $5)
+    and ($6::boolean is null or premie = $6)
+    and ($7::text is null or languages @> array[$7]::text[])
+    and ($8::bigint is null or family_id = $8)
+    and ($9::boolean or deactivated_at is null)
+order by
+    greatest(
+        word_similarity(coalesce($1, ''), first_name),
+        word_similarity(coalesce($1, ''), last_name)
+    ) desc,
+    last_name,
+    first_name
+limit $10
+`
+
+type SearchChildrenParams struct {
+	NameQuery          *string     `json:"name_query"`
+	MinBirthDate       pgtype.Date `json:"min_birth_date"`
+	MaxBirthDate       pgtype.Date `json:"max_birth_date"`
+	Sex                *string     `json:"sex"`
+	Twin               *bool       `json:"twin"`
+	Premie             *bool       `json:"premie"`
+	Language           *string     `json:"language"`
+	FamilyID           *int64      `json:"family_id"`
+	IncludeDeactivated bool        `json:"include_deactivated"`
+	LimitCount         int32       `json:"limit_count"`
+}
+
+// Every filter is optional (sqlc.narg(x) is null or ...); passing none
+// returns every child (subject to include_deactivated/limit_count).
+//
+// Name matching uses pg_trgm's word_similarity rather than plain
+// similarity() or ILIKE: word_similarity scores how well the query matches
+// *part of* the field, so a short query like "jhon" can still match
+// "Johnathan" -- plain similarity() compares the whole strings and craters
+// when they're very different lengths, and ILIKE only catches exact
+// substrings, not typos. The 0.2 threshold is a literal in the query
+// rather than the pg_trgm.similarity_threshold GUC (the %/<% operators'
+// default is 0.3, too strict for short name fields, and overriding a GUC
+// per-query risks leaking to the next query on a pooled connection).
+func (q *Queries) SearchChildren(ctx context.Context, arg SearchChildrenParams) ([]Child, error) {
+	rows, err := q.db.Query(ctx, searchChildren,
+		arg.NameQuery,
+		arg.MinBirthDate,
+		arg.MaxBirthDate,
+		arg.Sex,
+		arg.Twin,
+		arg.Premie,
+		arg.Language,
+		arg.FamilyID,
+		arg.IncludeDeactivated,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Child
+	for rows.Next() {
+		var i Child
+		if err := rows.Scan(
+			&i.ID,
+			&i.FamilyID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Sex,
+			&i.BirthDate,
+			&i.DueDate,
+			&i.GestationalAgeWeeks,
+			&i.BirthWeight,
+			&i.Apgar1,
+			&i.Apgar2,
+			&i.Premie,
+			&i.BirthComplications,
+			&i.Twin,
+			&i.RaceEthnicity,
+			&i.Languages,
+			&i.RecruitmentSourceID,
+			&i.RecruitmentSourceOther,
+			&i.Response,
+			&i.CreatedByUserID,
+			&i.DeactivatedAt,
+			&i.InactiveReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateChild = `-- name: UpdateChild :one
 update children set
     first_name = $1,

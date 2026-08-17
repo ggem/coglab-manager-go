@@ -38,6 +38,7 @@ type Querier struct {
 	ListChildrenByFamilyFunc func(ctx context.Context, familyID int64) ([]db.Child, error)
 	UpdateChildFunc          func(ctx context.Context, arg db.UpdateChildParams) (db.Child, error)
 	DeactivateChildFunc      func(ctx context.Context, arg db.DeactivateChildParams) error
+	SearchChildrenFunc       func(ctx context.Context, arg db.SearchChildrenParams) ([]db.Child, error)
 
 	CreateNoteFunc        func(ctx context.Context, arg db.CreateNoteParams) (db.Note, error)
 	ListNotesByEntityFunc func(ctx context.Context, arg db.ListNotesByEntityParams) ([]db.Note, error)
@@ -193,6 +194,13 @@ func (q *Querier) DeactivateChild(ctx context.Context, arg db.DeactivateChildPar
 		panic("dbfake: DeactivateChild not implemented")
 	}
 	return q.DeactivateChildFunc(ctx, arg)
+}
+
+func (q *Querier) SearchChildren(ctx context.Context, arg db.SearchChildrenParams) ([]db.Child, error) {
+	if q.SearchChildrenFunc == nil {
+		panic("dbfake: SearchChildren not implemented")
+	}
+	return q.SearchChildrenFunc(ctx, arg)
 }
 
 func (q *Querier) CreateNote(ctx context.Context, arg db.CreateNoteParams) (db.Note, error) {
