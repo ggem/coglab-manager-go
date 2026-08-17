@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/ggem/coglab-manager-go/internal/db"
 )
@@ -32,4 +33,18 @@ func currentUserID(ctx context.Context) *int64 {
 		return nil
 	}
 	return &session.UserID
+}
+
+// requireCurrentUserID returns the authenticated user's ID for use in a
+// non-nullable field (e.g. a note's author). It writes a 500 and returns
+// ok=false in the should-never-happen case where a route behind
+// requireAuth has no session in its context.
+func (s *Server) requireCurrentUserID(w http.ResponseWriter, r *http.Request) (userID int64, ok bool) {
+	id := currentUserID(r.Context())
+	if id == nil {
+		s.logger.Error("no session in context for an authenticated route")
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return 0, false
+	}
+	return *id, true
 }

@@ -64,6 +64,10 @@ func (s *Server) Routes() http.Handler {
 					r.Post("/", s.handleCreateGuardian)
 					r.Get("/", s.handleListGuardiansByFamily)
 				})
+				r.Route("/children", func(r chi.Router) {
+					r.Post("/", s.handleCreateChild)
+					r.Get("/", s.handleListChildrenByFamily)
+				})
 			})
 		})
 
@@ -71,6 +75,12 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/", s.handleGetGuardian)
 			r.Put("/", s.handleUpdateGuardian)
 			r.Delete("/", s.handleDeleteGuardian)
+		})
+
+		r.Route("/children/{childID}", func(r chi.Router) {
+			r.Get("/", s.handleGetChild)
+			r.Put("/", s.handleUpdateChild)
+			r.Post("/deactivate", s.handleDeactivateChild)
 		})
 	})
 
