@@ -81,6 +81,10 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/", s.handleGetChild)
 			r.Put("/", s.handleUpdateChild)
 			r.Post("/deactivate", s.handleDeactivateChild)
+			r.Route("/notes", func(r chi.Router) {
+				r.Post("/", s.handleCreateChildNote)
+				r.Get("/", s.handleListChildNotes)
+			})
 		})
 	})
 
