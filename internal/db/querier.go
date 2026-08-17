@@ -43,6 +43,20 @@ type Querier interface {
 	// default is 0.3, too strict for short name fields, and overriding a GUC
 	// per-query risks leaking to the next query on a pooled connection).
 	SearchChildren(ctx context.Context, arg SearchChildrenParams) ([]Child, error)
+	// Existing-family lookup, primarily to catch duplicates before creating a
+	// new family record for what's actually an existing one -- the legacy app
+	// had this exact problem badly enough to need three separate hand-run
+	// merge/dedupe SQL scripts. Matches if any guardian on the family matches
+	// the name/email/phone filters, or the family's own address fields match.
+	// A family with no guardians yet can't match on guardian filters (inner
+	// join); that's fine since a family is always created together with its
+	// first guardian in normal use.
+	//
+	// Results are ordered by id rather than name-match quality: DISTINCT
+	// requires ORDER BY expressions to be in the select list, and this is a
+	// "review a handful of candidates" tool for staff, not a ranked search --
+	// ranking isn't worth the extra query complexity here.
+	SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error)
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)

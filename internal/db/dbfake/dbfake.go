@@ -23,9 +23,10 @@ type Querier struct {
 	TouchSessionLastSeenFunc  func(ctx context.Context, id int64) error
 	CreateAuditEventFunc      func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error)
 
-	CreateFamilyFunc  func(ctx context.Context, arg db.CreateFamilyParams) (db.Family, error)
-	GetFamilyByIDFunc func(ctx context.Context, id int64) (db.Family, error)
-	UpdateFamilyFunc  func(ctx context.Context, arg db.UpdateFamilyParams) (db.Family, error)
+	CreateFamilyFunc   func(ctx context.Context, arg db.CreateFamilyParams) (db.Family, error)
+	GetFamilyByIDFunc  func(ctx context.Context, id int64) (db.Family, error)
+	UpdateFamilyFunc   func(ctx context.Context, arg db.UpdateFamilyParams) (db.Family, error)
+	SearchFamiliesFunc func(ctx context.Context, arg db.SearchFamiliesParams) ([]db.Family, error)
 
 	CreateGuardianFunc        func(ctx context.Context, arg db.CreateGuardianParams) (db.Guardian, error)
 	GetGuardianByIDFunc       func(ctx context.Context, id int64) (db.Guardian, error)
@@ -124,6 +125,13 @@ func (q *Querier) UpdateFamily(ctx context.Context, arg db.UpdateFamilyParams) (
 		panic("dbfake: UpdateFamily not implemented")
 	}
 	return q.UpdateFamilyFunc(ctx, arg)
+}
+
+func (q *Querier) SearchFamilies(ctx context.Context, arg db.SearchFamiliesParams) ([]db.Family, error) {
+	if q.SearchFamiliesFunc == nil {
+		panic("dbfake: SearchFamilies not implemented")
+	}
+	return q.SearchFamiliesFunc(ctx, arg)
 }
 
 func (q *Querier) CreateGuardian(ctx context.Context, arg db.CreateGuardianParams) (db.Guardian, error) {

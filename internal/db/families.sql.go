@@ -71,6 +71,83 @@ func (q *Queries) GetFamilyByID(ctx context.Context, id int64) (Family, error) {
 	return i, err
 }
 
+const searchFamilies = `-- name: SearchFamilies :many
+select distinct families.id, families.address, families.city, families.state, families.zip, families.preferred_contact_method, families.created_at, families.updated_at
+from families
+join guardians on guardians.family_id = families.id
+where
+    ($1::text is null
+        or word_similarity($1, guardians.first_name) > 0.2
+        or word_similarity($1, guardians.last_name) > 0.2)
+    and ($2::text is null or lower(guardians.email) = lower($2))
+    and ($3::text is null or guardians.phone_number = $3)
+    and ($4::text is null or families.address ilike '%' || $4 || '%')
+    and ($5::text is null or lower(families.city) = lower($5))
+    and ($6::text is null or families.zip = $6)
+order by families.id
+limit $7
+`
+
+type SearchFamiliesParams struct {
+	NameQuery   *string `json:"name_query"`
+	Email       *string `json:"email"`
+	PhoneNumber *string `json:"phone_number"`
+	Address     *string `json:"address"`
+	City        *string `json:"city"`
+	Zip         *string `json:"zip"`
+	LimitCount  int32   `json:"limit_count"`
+}
+
+// Existing-family lookup, primarily to catch duplicates before creating a
+// new family record for what's actually an existing one -- the legacy app
+// had this exact problem badly enough to need three separate hand-run
+// merge/dedupe SQL scripts. Matches if any guardian on the family matches
+// the name/email/phone filters, or the family's own address fields match.
+// A family with no guardians yet can't match on guardian filters (inner
+// join); that's fine since a family is always created together with its
+// first guardian in normal use.
+//
+// Results are ordered by id rather than name-match quality: DISTINCT
+// requires ORDER BY expressions to be in the select list, and this is a
+// "review a handful of candidates" tool for staff, not a ranked search --
+// ranking isn't worth the extra query complexity here.
+func (q *Queries) SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error) {
+	rows, err := q.db.Query(ctx, searchFamilies,
+		arg.NameQuery,
+		arg.Email,
+		arg.PhoneNumber,
+		arg.Address,
+		arg.City,
+		arg.Zip,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Family
+	for rows.Next() {
+		var i Family
+		if err := rows.Scan(
+			&i.ID,
+			&i.Address,
+			&i.City,
+			&i.State,
+			&i.Zip,
+			&i.PreferredContactMethod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateFamily = `-- name: UpdateFamily :one
 update families set
     address = $1,
