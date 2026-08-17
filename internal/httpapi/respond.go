@@ -22,3 +22,9 @@ type errorResponse struct {
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
 }
+
+// ptr returns a pointer to v, for building pointer-typed struct literal
+// fields (e.g. audit.Event.EntityType) from a value in one expression.
+func ptr[T any](v T) *T {
+	return &v
+}

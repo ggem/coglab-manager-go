@@ -52,6 +52,7 @@ func run() error {
 		auth.NewPasswordAuthenticator(queries),
 		auth.NewSessionManager(queries, secureCookies()),
 		audit.NewRecorder(queries),
+		queries,
 		logger,
 	)
 

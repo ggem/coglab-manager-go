@@ -23,3 +23,13 @@ func sessionFromContext(ctx context.Context) (session db.Session, ok bool) {
 	session, ok = ctx.Value(sessionContextKey).(db.Session)
 	return session, ok
 }
+
+// currentUserID returns the authenticated user's ID for use as an audit
+// event's ActorUserID, or nil if ctx never passed through requireAuth.
+func currentUserID(ctx context.Context) *int64 {
+	session, ok := sessionFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	return &session.UserID
+}

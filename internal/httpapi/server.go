@@ -8,11 +8,13 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/auth"
+	"github.com/ggem/coglab-manager-go/internal/db"
 )
 
 // Server holds the dependencies HTTP handlers need. authenticator is typed
@@ -20,19 +22,24 @@ import (
 // plausibly want to substitute (e.g. a test double, or a future SSO
 // authenticator); sessions and audit are concrete types because
 // *auth.SessionManager and *audit.Recorder are each the only real
-// implementation and aren't swapped out.
+// implementation and aren't swapped out. queries is used directly by
+// handlers with no business logic beyond CRUD (families, guardians, ...);
+// if that logic grows past what a handler should own, it gets its own
+// domain package the way auth and audit already have.
 type Server struct {
 	authenticator auth.LocalAuthenticator
 	sessions      *auth.SessionManager
 	audit         *audit.Recorder
+	queries       db.Querier
 	logger        *slog.Logger
 }
 
-func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, logger *slog.Logger) *Server {
+func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, logger *slog.Logger) *Server {
 	return &Server{
 		authenticator: authenticator,
 		sessions:      sessions,
 		audit:         recorder,
+		queries:       queries,
 		logger:        logger,
 	}
 }
@@ -42,9 +49,33 @@ func (s *Server) Routes() http.Handler {
 
 	r.Get("/healthz", s.handleHealthz)
 	r.Post("/login", s.handleLogin)
-	r.With(s.requireAuth).Post("/logout", s.handleLogout)
+
+	r.Group(func(r chi.Router) {
+		r.Use(s.requireAuth)
+
+		r.Post("/logout", s.handleLogout)
+
+		r.Route("/families", func(r chi.Router) {
+			r.Post("/", s.handleCreateFamily)
+			r.Route("/{familyID}", func(r chi.Router) {
+				r.Get("/", s.handleGetFamily)
+				r.Put("/", s.handleUpdateFamily)
+			})
+		})
+	})
 
 	return r
+}
+
+// idParam parses the named chi URL parameter as an int64, writing a 400
+// response and returning ok=false if it's missing or not a valid ID.
+func idParam(w http.ResponseWriter, r *http.Request, name string) (id int64, ok bool) {
+	id, err := strconv.ParseInt(chi.URLParam(r, name), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid "+name)
+		return 0, false
+	}
+	return id, true
 }
 
 // recordAuditEvent writes an audit event and logs, rather than returns, any

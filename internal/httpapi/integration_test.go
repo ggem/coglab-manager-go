@@ -67,7 +67,7 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {

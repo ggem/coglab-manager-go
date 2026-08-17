@@ -28,7 +28,7 @@ func discardLogger() *slog.Logger {
 }
 
 func newTestServer(q *dbfake.Querier) *Server {
-	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), discardLogger())
+	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, discardLogger())
 }
 
 func postJSON(t *testing.T, s *Server, path string, body any) *httptest.ResponseRecorder {
