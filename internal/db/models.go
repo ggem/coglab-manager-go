@@ -22,6 +22,58 @@ type AuditEvent struct {
 	Metadata    []byte             `json:"metadata"`
 }
 
+type Child struct {
+	ID                     int64              `json:"id"`
+	FamilyID               int64              `json:"family_id"`
+	FirstName              string             `json:"first_name"`
+	LastName               string             `json:"last_name"`
+	Sex                    string             `json:"sex"`
+	BirthDate              pgtype.Date        `json:"birth_date"`
+	DueDate                pgtype.Date        `json:"due_date"`
+	GestationalAgeWeeks    pgtype.Numeric     `json:"gestational_age_weeks"`
+	BirthWeight            pgtype.Numeric     `json:"birth_weight"`
+	Apgar1                 *int16             `json:"apgar_1"`
+	Apgar2                 *int16             `json:"apgar_2"`
+	Premie                 *bool              `json:"premie"`
+	BirthComplications     *bool              `json:"birth_complications"`
+	Twin                   *bool              `json:"twin"`
+	RaceEthnicity          []string           `json:"race_ethnicity"`
+	Languages              []string           `json:"languages"`
+	RecruitmentSourceID    *int64             `json:"recruitment_source_id"`
+	RecruitmentSourceOther string             `json:"recruitment_source_other"`
+	Response               string             `json:"response"`
+	CreatedByUserID        int64              `json:"created_by_user_id"`
+	DeactivatedAt          pgtype.Timestamptz `json:"deactivated_at"`
+	InactiveReason         string             `json:"inactive_reason"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Family struct {
+	ID                     int64              `json:"id"`
+	Address                string             `json:"address"`
+	City                   string             `json:"city"`
+	State                  string             `json:"state"`
+	Zip                    string             `json:"zip"`
+	PreferredContactMethod *string            `json:"preferred_contact_method"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Guardian struct {
+	ID          int64              `json:"id"`
+	FamilyID    int64              `json:"family_id"`
+	FirstName   string             `json:"first_name"`
+	LastName    string             `json:"last_name"`
+	Education   string             `json:"education"`
+	Occupation  string             `json:"occupation"`
+	PhoneNumber string             `json:"phone_number"`
+	PhoneType   *string            `json:"phone_type"`
+	Email       string             `json:"email"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Lab struct {
 	ID        int64              `json:"id"`
 	Name      string             `json:"name"`
@@ -37,6 +89,21 @@ type LabMembership struct {
 	RoleID    int64              `json:"role_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Note struct {
+	ID           int64              `json:"id"`
+	EntityType   string             `json:"entity_type"`
+	EntityID     int64              `json:"entity_id"`
+	AuthorUserID int64              `json:"author_user_id"`
+	Body         string             `json:"body"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecruitmentSource struct {
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
 }
 
 type Role struct {

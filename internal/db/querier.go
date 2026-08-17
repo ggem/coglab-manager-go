@@ -10,13 +10,30 @@ import (
 
 type Querier interface {
 	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
+	CreateChild(ctx context.Context, arg CreateChildParams) (Child, error)
+	CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error)
+	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
+	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
+	CreateRecruitmentSource(ctx context.Context, name string) (RecruitmentSource, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeactivateChild(ctx context.Context, arg DeactivateChildParams) error
+	DeleteGuardian(ctx context.Context, id int64) error
+	GetChildByID(ctx context.Context, id int64) (Child, error)
+	GetFamilyByID(ctx context.Context, id int64) (Family, error)
+	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
+	ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error)
+	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
+	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
 	RevokeSession(ctx context.Context, tokenHash []byte) error
 	TouchSessionLastSeen(ctx context.Context, id int64) error
+	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
+	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
+	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
 }
 
 var _ Querier = (*Queries)(nil)
