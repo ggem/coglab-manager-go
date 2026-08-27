@@ -69,9 +69,12 @@ type Querier struct {
 	UpdateConditionFunc                func(ctx context.Context, arg db.UpdateConditionParams) (db.Condition, error)
 	DeactivateConditionFunc            func(ctx context.Context, id int64) error
 	CreateConditionValueFunc           func(ctx context.Context, arg db.CreateConditionValueParams) (db.ConditionValue, error)
+	GetConditionValueLabIDFunc         func(ctx context.Context, id int64) (int64, error)
 	ListConditionValuesByConditionFunc func(ctx context.Context, conditionID int64) ([]db.ConditionValue, error)
 	UpdateConditionValueFunc           func(ctx context.Context, arg db.UpdateConditionValueParams) (db.ConditionValue, error)
 	DeactivateConditionValueFunc       func(ctx context.Context, id int64) error
+
+	GetLabMembershipFunc func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
 
 	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
 	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
@@ -387,6 +390,20 @@ func (q *Querier) GetConditionByID(ctx context.Context, id int64) (db.Condition,
 		panic("dbfake: GetConditionByID not implemented")
 	}
 	return q.GetConditionByIDFunc(ctx, id)
+}
+
+func (q *Querier) GetConditionValueLabID(ctx context.Context, id int64) (int64, error) {
+	if q.GetConditionValueLabIDFunc == nil {
+		panic("dbfake: GetConditionValueLabID not implemented")
+	}
+	return q.GetConditionValueLabIDFunc(ctx, id)
+}
+
+func (q *Querier) GetLabMembership(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error) {
+	if q.GetLabMembershipFunc == nil {
+		panic("dbfake: GetLabMembership not implemented")
+	}
+	return q.GetLabMembershipFunc(ctx, arg)
 }
 
 func (q *Querier) ListConditionsByLab(ctx context.Context, labID int64) ([]db.Condition, error) {

@@ -15,6 +15,14 @@ returning *;
 -- name: DeactivateCondition :exec
 update conditions set deactivated_at = now() where id = sqlc.arg(id);
 
+-- name: GetConditionValueLabID :one
+-- Resolves the lab a condition_value belongs to via its parent condition,
+-- for lab-membership authorization -- condition_values has no lab_id of
+-- its own.
+select conditions.lab_id from condition_values
+join conditions on conditions.id = condition_values.condition_id
+where condition_values.id = sqlc.arg(id);
+
 -- name: CreateConditionValue :one
 insert into condition_values (condition_id, name) values (sqlc.arg(condition_id), sqlc.arg(name))
 returning *;

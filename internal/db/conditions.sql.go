@@ -93,6 +93,22 @@ func (q *Queries) GetConditionByID(ctx context.Context, id int64) (Condition, er
 	return i, err
 }
 
+const getConditionValueLabID = `-- name: GetConditionValueLabID :one
+select conditions.lab_id from condition_values
+join conditions on conditions.id = condition_values.condition_id
+where condition_values.id = $1
+`
+
+// Resolves the lab a condition_value belongs to via its parent condition,
+// for lab-membership authorization -- condition_values has no lab_id of
+// its own.
+func (q *Queries) GetConditionValueLabID(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getConditionValueLabID, id)
+	var lab_id int64
+	err := row.Scan(&lab_id)
+	return lab_id, err
+}
+
 const listConditionValuesByCondition = `-- name: ListConditionValuesByCondition :many
 select id, condition_id, name, deactivated_at, created_at, updated_at from condition_values where condition_id = $1 order by name
 `

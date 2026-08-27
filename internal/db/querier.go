@@ -37,11 +37,16 @@ type Querier interface {
 	DeleteGuardian(ctx context.Context, id int64) error
 	GetChildByID(ctx context.Context, id int64) (Child, error)
 	GetConditionByID(ctx context.Context, id int64) (Condition, error)
+	// Resolves the lab a condition_value belongs to via its parent condition,
+	// for lab-membership authorization -- condition_values has no lab_id of
+	// its own.
+	GetConditionValueLabID(ctx context.Context, id int64) (int64, error)
 	GetEquipmentByID(ctx context.Context, id int64) (Equipment, error)
 	GetExperimentByID(ctx context.Context, id int64) (Experiment, error)
 	GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
+	GetLabMembership(ctx context.Context, arg GetLabMembershipParams) (LabMembership, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
