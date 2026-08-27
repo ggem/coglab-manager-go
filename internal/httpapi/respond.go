@@ -28,3 +28,14 @@ func writeError(w http.ResponseWriter, status int, message string) {
 func ptr[T any](v T) *T {
 	return &v
 }
+
+// nonNilSlice returns s, or a non-nil empty slice if s is nil. A JSON body
+// that omits an array field (or sets it to `null`) decodes to a nil Go
+// slice; pgx encodes that as SQL NULL rather than an empty array, which
+// violates the `not null default '{}'` this app's text[] columns rely on.
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
