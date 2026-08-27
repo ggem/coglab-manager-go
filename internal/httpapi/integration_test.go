@@ -138,10 +138,25 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 		t.Fatalf("HashPassword: %v", err)
 	}
 	email := fmt.Sprintf("integration-experiments-%d@example.edu", time.Now().UnixNano())
-	if _, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+	user, err := testQueries.CreateUser(ctx, db.CreateUserParams{
 		Email: email, FirstName: "Integration", LastName: "Test", PasswordHash: &hash,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
+	}
+
+	// The experiments domain is lab-scoped: every request checks the user
+	// is a lab_memberships row for the target lab (see lab_authz.go). No
+	// CreateRole query exists yet (roles are the separate lab-membership
+	// permission-level concept, out of scope so far), so both the role and
+	// the membership are inserted directly.
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("integration-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", user.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
 	}
 
 	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
@@ -259,6 +274,22 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 	decode(do(http.MethodGet, fmt.Sprintf("/experiments/%d/", experiment.ID), nil), &afterDeactivate)
 	if !afterDeactivate.Deactivated {
 		t.Errorf("experiment Deactivated = false after deactivation")
+	}
+
+	// Lab-membership authorization against the real query, not just the
+	// dbfake stub the unit tests use: a lab this user has no
+	// lab_memberships row for must be unreachable, both to create under
+	// and to reach an existing resource through.
+	var otherLabID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Other Lab", fmt.Sprintf("other-%d", time.Now().UnixNano())).Scan(&otherLabID); err != nil {
+		t.Fatalf("insert other lab: %v", err)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/labs/%d/conditions/", otherLabID), conditionRequest{Name: "Should Be Blocked"}); rec.Code != http.StatusNotFound {
+		t.Errorf("create condition in a lab this user isn't a member of: status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+	if rec := do(http.MethodGet, fmt.Sprintf("/experiments/%d/", experiment.ID), nil); rec.Code != http.StatusOK {
+		t.Errorf("sanity check: own lab's experiment should still be reachable, status = %d", rec.Code)
 	}
 }
 

@@ -25,6 +25,11 @@ func newAuthenticatedTestServer(q *dbfake.Querier, userID int64) (*Server, *http
 	if q.TouchSessionLastSeenFunc == nil {
 		q.TouchSessionLastSeenFunc = func(ctx context.Context, id int64) error { return nil }
 	}
+	if q.GetLabMembershipFunc == nil {
+		q.GetLabMembershipFunc = func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error) {
+			return db.LabMembership{UserID: arg.UserID, LabID: arg.LabID}, nil
+		}
+	}
 	s := newTestServer(q)
 	cookie := &http.Cookie{Name: sessionCookieNameForTest, Value: "test-token"}
 	return s, cookie

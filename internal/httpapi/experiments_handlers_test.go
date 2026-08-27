@@ -204,6 +204,9 @@ func TestHandleUpdateExperiment_InvalidID(t *testing.T) {
 
 func TestHandleUpdateExperiment_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		UpdateExperimentFunc: func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
 			return db.Experiment{}, pgx.ErrNoRows
 		},
@@ -219,6 +222,9 @@ func TestHandleUpdateExperiment_NotFound(t *testing.T) {
 
 func TestHandleUpdateExperiment_InvalidStatus(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		UpdateExperimentFunc: func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
 			return db.Experiment{}, &pgconn.PgError{Code: pgCheckViolation}
 		},
@@ -235,6 +241,9 @@ func TestHandleUpdateExperiment_InvalidStatus(t *testing.T) {
 func TestHandleUpdateExperiment_Success(t *testing.T) {
 	var captured db.UpdateExperimentParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		UpdateExperimentFunc: func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
 			captured = arg
 			return db.Experiment{ID: arg.ID, Name: arg.Name, Status: arg.Status}, nil
@@ -267,6 +276,9 @@ func TestHandleDeactivateExperiment_InvalidID(t *testing.T) {
 
 func TestHandleDeactivateExperiment_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		DeactivateExperimentFunc: func(ctx context.Context, id int64) error {
 			return pgx.ErrNoRows
 		},
@@ -283,6 +295,9 @@ func TestHandleDeactivateExperiment_NotFound(t *testing.T) {
 func TestHandleDeactivateExperiment_Success(t *testing.T) {
 	var deactivatedID int64
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		DeactivateExperimentFunc: func(ctx context.Context, id int64) error {
 			deactivatedID = id
 			return nil

@@ -160,6 +160,9 @@ func TestHandleUpdateEquipment_InvalidID(t *testing.T) {
 
 func TestHandleUpdateEquipment_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetEquipmentByIDFunc: func(ctx context.Context, id int64) (db.Equipment, error) {
+			return db.Equipment{ID: id, LabID: 1}, nil
+		},
 		UpdateEquipmentFunc: func(ctx context.Context, arg db.UpdateEquipmentParams) (db.Equipment, error) {
 			return db.Equipment{}, pgx.ErrNoRows
 		},
@@ -175,6 +178,9 @@ func TestHandleUpdateEquipment_NotFound(t *testing.T) {
 
 func TestHandleUpdateEquipment_NegativeQuantity(t *testing.T) {
 	q := &dbfake.Querier{
+		GetEquipmentByIDFunc: func(ctx context.Context, id int64) (db.Equipment, error) {
+			return db.Equipment{ID: id, LabID: 1}, nil
+		},
 		UpdateEquipmentFunc: func(ctx context.Context, arg db.UpdateEquipmentParams) (db.Equipment, error) {
 			return db.Equipment{}, &pgconn.PgError{Code: pgCheckViolation}
 		},
@@ -191,6 +197,9 @@ func TestHandleUpdateEquipment_NegativeQuantity(t *testing.T) {
 func TestHandleUpdateEquipment_Success(t *testing.T) {
 	var captured db.UpdateEquipmentParams
 	q := &dbfake.Querier{
+		GetEquipmentByIDFunc: func(ctx context.Context, id int64) (db.Equipment, error) {
+			return db.Equipment{ID: id, LabID: 1}, nil
+		},
 		UpdateEquipmentFunc: func(ctx context.Context, arg db.UpdateEquipmentParams) (db.Equipment, error) {
 			captured = arg
 			return db.Equipment{ID: arg.ID, Name: arg.Name, Quantity: arg.Quantity}, nil
@@ -223,6 +232,9 @@ func TestHandleDeactivateEquipment_InvalidID(t *testing.T) {
 
 func TestHandleDeactivateEquipment_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetEquipmentByIDFunc: func(ctx context.Context, id int64) (db.Equipment, error) {
+			return db.Equipment{ID: id, LabID: 1}, nil
+		},
 		DeactivateEquipmentFunc: func(ctx context.Context, id int64) error {
 			return pgx.ErrNoRows
 		},
@@ -239,6 +251,9 @@ func TestHandleDeactivateEquipment_NotFound(t *testing.T) {
 func TestHandleDeactivateEquipment_Success(t *testing.T) {
 	var deactivatedID int64
 	q := &dbfake.Querier{
+		GetEquipmentByIDFunc: func(ctx context.Context, id int64) (db.Equipment, error) {
+			return db.Equipment{ID: id, LabID: 1}, nil
+		},
 		DeactivateEquipmentFunc: func(ctx context.Context, id int64) error {
 			deactivatedID = id
 			return nil

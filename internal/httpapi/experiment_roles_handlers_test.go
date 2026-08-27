@@ -137,6 +137,9 @@ func TestHandleUpdateExperimentRole_InvalidID(t *testing.T) {
 
 func TestHandleUpdateExperimentRole_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
 		UpdateExperimentRoleFunc: func(ctx context.Context, arg db.UpdateExperimentRoleParams) (db.ExperimentRole, error) {
 			return db.ExperimentRole{}, pgx.ErrNoRows
 		},
@@ -181,6 +184,9 @@ func TestHandleDeactivateExperimentRole_InvalidID(t *testing.T) {
 
 func TestHandleDeactivateExperimentRole_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
 		DeactivateExperimentRoleFunc: func(ctx context.Context, id int64) error {
 			return pgx.ErrNoRows
 		},
@@ -197,6 +203,9 @@ func TestHandleDeactivateExperimentRole_NotFound(t *testing.T) {
 func TestHandleDeactivateExperimentRole_Success(t *testing.T) {
 	var deactivatedID int64
 	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
 		DeactivateExperimentRoleFunc: func(ctx context.Context, id int64) error {
 			deactivatedID = id
 			return nil

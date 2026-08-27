@@ -94,12 +94,14 @@ func (s *Server) Routes() http.Handler {
 		// Lab-scoped lookup and experiment resources are created and listed
 		// under /labs/{labID}/..., then addressed directly by their own ID
 		// everywhere else -- the same nested-then-flat pattern as
-		// families/{familyID}/children vs. children/{childID}. There's no
-		// /labs resource or lab-membership authorization yet (see M1's
-		// lab_memberships table): any authenticated user can currently name
-		// any lab ID here. That gap applies to the API as a whole, not just
-		// this domain, and is flagged for a dedicated pass.
+		// families/{familyID}/children vs. children/{childID}. Every group
+		// here is gated by lab-membership (requireLabMember*): a request
+		// naming a lab/resource the user doesn't belong to gets a 404, same
+		// as a nonexistent one. There's still no /labs resource, and
+		// role-based permissions *within* a lab (who can do what once
+		// they're a member) are a separate, not-yet-built concern.
 		r.Route("/labs/{labID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberFromURL)
 			r.Route("/conditions", func(r chi.Router) {
 				r.Post("/", s.handleCreateCondition)
 				r.Get("/", s.handleListConditionsByLab)
@@ -119,6 +121,7 @@ func (s *Server) Routes() http.Handler {
 		})
 
 		r.Route("/conditions/{conditionID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForCondition)
 			r.Get("/", s.handleGetCondition)
 			r.Put("/", s.handleUpdateCondition)
 			r.Post("/deactivate", s.handleDeactivateCondition)
@@ -128,23 +131,27 @@ func (s *Server) Routes() http.Handler {
 			})
 		})
 		r.Route("/condition-values/{valueID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForConditionValue)
 			r.Put("/", s.handleUpdateConditionValue)
 			r.Post("/deactivate", s.handleDeactivateConditionValue)
 		})
 
 		r.Route("/equipment/{equipmentID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForEquipment)
 			r.Get("/", s.handleGetEquipment)
 			r.Put("/", s.handleUpdateEquipment)
 			r.Post("/deactivate", s.handleDeactivateEquipment)
 		})
 
 		r.Route("/experiment-roles/{roleID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForExperimentRole)
 			r.Get("/", s.handleGetExperimentRole)
 			r.Put("/", s.handleUpdateExperimentRole)
 			r.Post("/deactivate", s.handleDeactivateExperimentRole)
 		})
 
 		r.Route("/experiments/{experimentID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForExperiment)
 			r.Get("/", s.handleGetExperiment)
 			r.Put("/", s.handleUpdateExperiment)
 			r.Post("/deactivate", s.handleDeactivateExperiment)

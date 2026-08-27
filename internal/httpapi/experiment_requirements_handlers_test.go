@@ -15,6 +15,9 @@ func TestHandleAddExperimentCondition_Success(t *testing.T) {
 	var captured db.AddExperimentConditionParams
 	var capturedAudit db.CreateAuditEventParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
 			captured = arg
 			return nil
@@ -61,6 +64,9 @@ func TestHandleAddExperimentCondition_InvalidExperimentID(t *testing.T) {
 
 func TestHandleAddExperimentCondition_UnknownCondition(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
 			return &pgconn.PgError{Code: pgForeignKeyViolation}
 		},
@@ -79,6 +85,9 @@ func TestHandleAddExperimentCondition_AlreadyAdded(t *testing.T) {
 	// (experiment_id, condition_id); adding the same pair twice is a
 	// unique violation, not a foreign key or check violation.
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
 			return &pgconn.PgError{Code: pgUniqueViolation}
 		},
@@ -94,6 +103,9 @@ func TestHandleAddExperimentCondition_AlreadyAdded(t *testing.T) {
 
 func TestHandleAddExperimentCondition_UnexpectedDBError(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
 			return assertErr("connection reset by peer")
 		},
@@ -118,7 +130,12 @@ func TestHandleRemoveExperimentCondition_InvalidExperimentID(t *testing.T) {
 }
 
 func TestHandleRemoveExperimentCondition_InvalidConditionID(t *testing.T) {
-	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/conditions/not-a-number", cookie, nil)
 
@@ -140,6 +157,9 @@ func TestHandleListExperimentConditions_InvalidExperimentID(t *testing.T) {
 func TestHandleRemoveExperimentCondition_Success(t *testing.T) {
 	var captured db.RemoveExperimentConditionParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		RemoveExperimentConditionFunc: func(ctx context.Context, arg db.RemoveExperimentConditionParams) error {
 			captured = arg
 			return nil
@@ -162,6 +182,9 @@ func TestHandleRemoveExperimentCondition_Success(t *testing.T) {
 
 func TestHandleListExperimentConditions_Success(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		ListExperimentConditionsFunc: func(ctx context.Context, experimentID int64) ([]db.Condition, error) {
 			return []db.Condition{{ID: 5, Name: "Stimulus Type"}}, nil
 		},
@@ -182,6 +205,9 @@ func TestHandleListExperimentConditions_Success(t *testing.T) {
 func TestHandleAddExperimentEquipment_Success(t *testing.T) {
 	var captured db.AddExperimentEquipmentParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
 			captured = arg
 			return nil
@@ -204,6 +230,9 @@ func TestHandleAddExperimentEquipment_Success(t *testing.T) {
 
 func TestHandleAddExperimentEquipment_AlreadyAdded(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
 			return &pgconn.PgError{Code: pgUniqueViolation}
 		},
@@ -228,7 +257,12 @@ func TestHandleAddExperimentEquipment_InvalidExperimentID(t *testing.T) {
 }
 
 func TestHandleRemoveExperimentEquipment_InvalidEquipmentID(t *testing.T) {
-	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/equipment/not-a-number", cookie, nil)
 
@@ -240,6 +274,9 @@ func TestHandleRemoveExperimentEquipment_InvalidEquipmentID(t *testing.T) {
 func TestHandleRemoveExperimentEquipment_Success(t *testing.T) {
 	var captured db.RemoveExperimentEquipmentParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		RemoveExperimentEquipmentFunc: func(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error {
 			captured = arg
 			return nil
@@ -263,6 +300,9 @@ func TestHandleRemoveExperimentEquipment_Success(t *testing.T) {
 func TestHandleAddExperimentTrainingRequirement_Success(t *testing.T) {
 	var captured db.AddExperimentTrainingRequirementParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
 			captured = arg
 			return nil
@@ -285,6 +325,9 @@ func TestHandleAddExperimentTrainingRequirement_Success(t *testing.T) {
 
 func TestHandleAddExperimentTrainingRequirement_AlreadyAdded(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
 			return &pgconn.PgError{Code: pgUniqueViolation}
 		},
@@ -309,7 +352,12 @@ func TestHandleAddExperimentTrainingRequirement_InvalidExperimentID(t *testing.T
 }
 
 func TestHandleRemoveExperimentTrainingRequirement_InvalidRoleID(t *testing.T) {
-	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/training-requirements/not-a-number", cookie, nil)
 
@@ -321,6 +369,9 @@ func TestHandleRemoveExperimentTrainingRequirement_InvalidRoleID(t *testing.T) {
 func TestHandleRemoveExperimentTrainingRequirement_Success(t *testing.T) {
 	var captured db.RemoveExperimentTrainingRequirementParams
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		RemoveExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error {
 			captured = arg
 			return nil
@@ -343,6 +394,9 @@ func TestHandleRemoveExperimentTrainingRequirement_Success(t *testing.T) {
 
 func TestHandleListExperimentTrainingRequirements_Success(t *testing.T) {
 	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
 		ListExperimentTrainingRequirementsFunc: func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error) {
 			return []db.ExperimentRole{{ID: 2, Name: "Experimenter"}}, nil
 		},

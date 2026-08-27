@@ -159,6 +159,9 @@ func TestHandleUpdateCondition_InvalidID(t *testing.T) {
 
 func TestHandleUpdateCondition_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{ID: id, LabID: 1}, nil
+		},
 		UpdateConditionFunc: func(ctx context.Context, arg db.UpdateConditionParams) (db.Condition, error) {
 			return db.Condition{}, pgx.ErrNoRows
 		},
@@ -184,6 +187,9 @@ func TestHandleDeactivateCondition_InvalidID(t *testing.T) {
 
 func TestHandleDeactivateCondition_NotFound(t *testing.T) {
 	q := &dbfake.Querier{
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{ID: id, LabID: 1}, nil
+		},
 		DeactivateConditionFunc: func(ctx context.Context, id int64) error {
 			return pgx.ErrNoRows
 		},
@@ -201,6 +207,9 @@ func TestHandleDeactivateCondition_Success(t *testing.T) {
 	var deactivatedID int64
 	var capturedAudit db.CreateAuditEventParams
 	q := &dbfake.Querier{
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{ID: id, LabID: 1}, nil
+		},
 		DeactivateConditionFunc: func(ctx context.Context, id int64) error {
 			deactivatedID = id
 			return nil
@@ -228,6 +237,9 @@ func TestHandleDeactivateCondition_Success(t *testing.T) {
 func TestHandleCreateConditionValue_Success(t *testing.T) {
 	var captured db.CreateConditionValueParams
 	q := &dbfake.Querier{
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{ID: id, LabID: 1}, nil
+		},
 		CreateConditionValueFunc: func(ctx context.Context, arg db.CreateConditionValueParams) (db.ConditionValue, error) {
 			captured = arg
 			return db.ConditionValue{ID: 1, ConditionID: arg.ConditionID, Name: arg.Name}, nil
@@ -249,17 +261,20 @@ func TestHandleCreateConditionValue_Success(t *testing.T) {
 }
 
 func TestHandleCreateConditionValue_UnknownCondition(t *testing.T) {
+	// The lab-membership middleware fetches the parent condition before the
+	// handler runs, so a nonexistent condition_id now surfaces as 404 from
+	// that lookup rather than an insert-time foreign key violation.
 	q := &dbfake.Querier{
-		CreateConditionValueFunc: func(ctx context.Context, arg db.CreateConditionValueParams) (db.ConditionValue, error) {
-			return db.ConditionValue{}, &pgconn.PgError{Code: pgForeignKeyViolation}
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{}, pgx.ErrNoRows
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	rec := doRequest(t, s, http.MethodPost, "/conditions/404/values/", cookie, conditionValueRequest{Name: "Red"})
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -275,6 +290,9 @@ func TestHandleCreateConditionValue_InvalidConditionID(t *testing.T) {
 
 func TestHandleListConditionValuesByCondition_Success(t *testing.T) {
 	q := &dbfake.Querier{
+		GetConditionByIDFunc: func(ctx context.Context, id int64) (db.Condition, error) {
+			return db.Condition{ID: id, LabID: 1}, nil
+		},
 		ListConditionValuesByConditionFunc: func(ctx context.Context, conditionID int64) ([]db.ConditionValue, error) {
 			return []db.ConditionValue{{ID: 1, ConditionID: conditionID, Name: "Red"}}, nil
 		},
@@ -295,6 +313,9 @@ func TestHandleListConditionValuesByCondition_Success(t *testing.T) {
 func TestHandleDeactivateConditionValue_Success(t *testing.T) {
 	var deactivatedID int64
 	q := &dbfake.Querier{
+		GetConditionValueLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
 		DeactivateConditionValueFunc: func(ctx context.Context, id int64) error {
 			deactivatedID = id
 			return nil
