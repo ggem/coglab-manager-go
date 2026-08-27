@@ -9,8 +9,19 @@ import (
 )
 
 type Querier interface {
+	// Join management: conditions, equipment, and training-role requirements
+	// for an experiment. Each List query joins back to the lookup table so
+	// callers get full rows (name, etc.) in one query instead of N+1 lookups.
+	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error
+	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error
+	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error
 	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
 	CreateChild(ctx context.Context, arg CreateChildParams) (Child, error)
+	CreateCondition(ctx context.Context, arg CreateConditionParams) (Condition, error)
+	CreateConditionValue(ctx context.Context, arg CreateConditionValueParams) (ConditionValue, error)
+	CreateEquipment(ctx context.Context, arg CreateEquipmentParams) (Equipment, error)
+	CreateExperiment(ctx context.Context, arg CreateExperimentParams) (Experiment, error)
+	CreateExperimentRole(ctx context.Context, arg CreateExperimentRoleParams) (ExperimentRole, error)
 	CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error)
 	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
@@ -18,8 +29,17 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateChild(ctx context.Context, arg DeactivateChildParams) error
+	DeactivateCondition(ctx context.Context, id int64) error
+	DeactivateConditionValue(ctx context.Context, id int64) error
+	DeactivateEquipment(ctx context.Context, id int64) error
+	DeactivateExperiment(ctx context.Context, id int64) error
+	DeactivateExperimentRole(ctx context.Context, id int64) error
 	DeleteGuardian(ctx context.Context, id int64) error
 	GetChildByID(ctx context.Context, id int64) (Child, error)
+	GetConditionByID(ctx context.Context, id int64) (Condition, error)
+	GetEquipmentByID(ctx context.Context, id int64) (Equipment, error)
+	GetExperimentByID(ctx context.Context, id int64) (Experiment, error)
+	GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
@@ -27,8 +47,19 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error)
+	ListConditionValuesByCondition(ctx context.Context, conditionID int64) ([]ConditionValue, error)
+	ListConditionsByLab(ctx context.Context, labID int64) ([]Condition, error)
+	ListEquipmentByLab(ctx context.Context, labID int64) ([]Equipment, error)
+	ListExperimentConditions(ctx context.Context, experimentID int64) ([]Condition, error)
+	ListExperimentEquipment(ctx context.Context, experimentID int64) ([]Equipment, error)
+	ListExperimentRolesByLab(ctx context.Context, labID int64) ([]ExperimentRole, error)
+	ListExperimentTrainingRequirements(ctx context.Context, experimentID int64) ([]ExperimentRole, error)
+	ListExperimentsByLab(ctx context.Context, labID int64) ([]Experiment, error)
 	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
+	RemoveExperimentCondition(ctx context.Context, arg RemoveExperimentConditionParams) error
+	RemoveExperimentEquipment(ctx context.Context, arg RemoveExperimentEquipmentParams) error
+	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error
 	RevokeSession(ctx context.Context, tokenHash []byte) error
 	// Every filter is optional (sqlc.narg(x) is null or ...); passing none
 	// returns every child (subject to include_deactivated/limit_count).
@@ -59,6 +90,11 @@ type Querier interface {
 	SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error)
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
+	UpdateCondition(ctx context.Context, arg UpdateConditionParams) (Condition, error)
+	UpdateConditionValue(ctx context.Context, arg UpdateConditionValueParams) (ConditionValue, error)
+	UpdateEquipment(ctx context.Context, arg UpdateEquipmentParams) (Equipment, error)
+	UpdateExperiment(ctx context.Context, arg UpdateExperimentParams) (Experiment, error)
+	UpdateExperimentRole(ctx context.Context, arg UpdateExperimentRoleParams) (ExperimentRole, error)
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
 }

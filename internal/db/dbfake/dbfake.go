@@ -46,6 +46,44 @@ type Querier struct {
 
 	ListActiveRecruitmentSourcesFunc func(ctx context.Context) ([]db.RecruitmentSource, error)
 	CreateRecruitmentSourceFunc      func(ctx context.Context, name string) (db.RecruitmentSource, error)
+
+	CreateExperimentFunc     func(ctx context.Context, arg db.CreateExperimentParams) (db.Experiment, error)
+	GetExperimentByIDFunc    func(ctx context.Context, id int64) (db.Experiment, error)
+	ListExperimentsByLabFunc func(ctx context.Context, labID int64) ([]db.Experiment, error)
+	UpdateExperimentFunc     func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error)
+	DeactivateExperimentFunc func(ctx context.Context, id int64) error
+
+	AddExperimentConditionFunc              func(ctx context.Context, arg db.AddExperimentConditionParams) error
+	RemoveExperimentConditionFunc           func(ctx context.Context, arg db.RemoveExperimentConditionParams) error
+	ListExperimentConditionsFunc            func(ctx context.Context, experimentID int64) ([]db.Condition, error)
+	AddExperimentEquipmentFunc              func(ctx context.Context, arg db.AddExperimentEquipmentParams) error
+	RemoveExperimentEquipmentFunc           func(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error
+	ListExperimentEquipmentFunc             func(ctx context.Context, experimentID int64) ([]db.Equipment, error)
+	AddExperimentTrainingRequirementFunc    func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error
+	RemoveExperimentTrainingRequirementFunc func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error
+	ListExperimentTrainingRequirementsFunc  func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error)
+
+	CreateConditionFunc                func(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error)
+	GetConditionByIDFunc               func(ctx context.Context, id int64) (db.Condition, error)
+	ListConditionsByLabFunc            func(ctx context.Context, labID int64) ([]db.Condition, error)
+	UpdateConditionFunc                func(ctx context.Context, arg db.UpdateConditionParams) (db.Condition, error)
+	DeactivateConditionFunc            func(ctx context.Context, id int64) error
+	CreateConditionValueFunc           func(ctx context.Context, arg db.CreateConditionValueParams) (db.ConditionValue, error)
+	ListConditionValuesByConditionFunc func(ctx context.Context, conditionID int64) ([]db.ConditionValue, error)
+	UpdateConditionValueFunc           func(ctx context.Context, arg db.UpdateConditionValueParams) (db.ConditionValue, error)
+	DeactivateConditionValueFunc       func(ctx context.Context, id int64) error
+
+	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
+	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
+	ListEquipmentByLabFunc  func(ctx context.Context, labID int64) ([]db.Equipment, error)
+	UpdateEquipmentFunc     func(ctx context.Context, arg db.UpdateEquipmentParams) (db.Equipment, error)
+	DeactivateEquipmentFunc func(ctx context.Context, id int64) error
+
+	CreateExperimentRoleFunc     func(ctx context.Context, arg db.CreateExperimentRoleParams) (db.ExperimentRole, error)
+	GetExperimentRoleByIDFunc    func(ctx context.Context, id int64) (db.ExperimentRole, error)
+	ListExperimentRolesByLabFunc func(ctx context.Context, labID int64) ([]db.ExperimentRole, error)
+	UpdateExperimentRoleFunc     func(ctx context.Context, arg db.UpdateExperimentRoleParams) (db.ExperimentRole, error)
+	DeactivateExperimentRoleFunc func(ctx context.Context, id int64) error
 }
 
 var _ db.Querier = (*Querier)(nil)
@@ -237,4 +275,235 @@ func (q *Querier) CreateRecruitmentSource(ctx context.Context, name string) (db.
 		panic("dbfake: CreateRecruitmentSource not implemented")
 	}
 	return q.CreateRecruitmentSourceFunc(ctx, name)
+}
+
+func (q *Querier) CreateExperiment(ctx context.Context, arg db.CreateExperimentParams) (db.Experiment, error) {
+	if q.CreateExperimentFunc == nil {
+		panic("dbfake: CreateExperiment not implemented")
+	}
+	return q.CreateExperimentFunc(ctx, arg)
+}
+
+func (q *Querier) GetExperimentByID(ctx context.Context, id int64) (db.Experiment, error) {
+	if q.GetExperimentByIDFunc == nil {
+		panic("dbfake: GetExperimentByID not implemented")
+	}
+	return q.GetExperimentByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListExperimentsByLab(ctx context.Context, labID int64) ([]db.Experiment, error) {
+	if q.ListExperimentsByLabFunc == nil {
+		panic("dbfake: ListExperimentsByLab not implemented")
+	}
+	return q.ListExperimentsByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateExperiment(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
+	if q.UpdateExperimentFunc == nil {
+		panic("dbfake: UpdateExperiment not implemented")
+	}
+	return q.UpdateExperimentFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateExperiment(ctx context.Context, id int64) error {
+	if q.DeactivateExperimentFunc == nil {
+		panic("dbfake: DeactivateExperiment not implemented")
+	}
+	return q.DeactivateExperimentFunc(ctx, id)
+}
+
+func (q *Querier) AddExperimentCondition(ctx context.Context, arg db.AddExperimentConditionParams) error {
+	if q.AddExperimentConditionFunc == nil {
+		panic("dbfake: AddExperimentCondition not implemented")
+	}
+	return q.AddExperimentConditionFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveExperimentCondition(ctx context.Context, arg db.RemoveExperimentConditionParams) error {
+	if q.RemoveExperimentConditionFunc == nil {
+		panic("dbfake: RemoveExperimentCondition not implemented")
+	}
+	return q.RemoveExperimentConditionFunc(ctx, arg)
+}
+
+func (q *Querier) ListExperimentConditions(ctx context.Context, experimentID int64) ([]db.Condition, error) {
+	if q.ListExperimentConditionsFunc == nil {
+		panic("dbfake: ListExperimentConditions not implemented")
+	}
+	return q.ListExperimentConditionsFunc(ctx, experimentID)
+}
+
+func (q *Querier) AddExperimentEquipment(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
+	if q.AddExperimentEquipmentFunc == nil {
+		panic("dbfake: AddExperimentEquipment not implemented")
+	}
+	return q.AddExperimentEquipmentFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveExperimentEquipment(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error {
+	if q.RemoveExperimentEquipmentFunc == nil {
+		panic("dbfake: RemoveExperimentEquipment not implemented")
+	}
+	return q.RemoveExperimentEquipmentFunc(ctx, arg)
+}
+
+func (q *Querier) ListExperimentEquipment(ctx context.Context, experimentID int64) ([]db.Equipment, error) {
+	if q.ListExperimentEquipmentFunc == nil {
+		panic("dbfake: ListExperimentEquipment not implemented")
+	}
+	return q.ListExperimentEquipmentFunc(ctx, experimentID)
+}
+
+func (q *Querier) AddExperimentTrainingRequirement(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
+	if q.AddExperimentTrainingRequirementFunc == nil {
+		panic("dbfake: AddExperimentTrainingRequirement not implemented")
+	}
+	return q.AddExperimentTrainingRequirementFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveExperimentTrainingRequirement(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error {
+	if q.RemoveExperimentTrainingRequirementFunc == nil {
+		panic("dbfake: RemoveExperimentTrainingRequirement not implemented")
+	}
+	return q.RemoveExperimentTrainingRequirementFunc(ctx, arg)
+}
+
+func (q *Querier) ListExperimentTrainingRequirements(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error) {
+	if q.ListExperimentTrainingRequirementsFunc == nil {
+		panic("dbfake: ListExperimentTrainingRequirements not implemented")
+	}
+	return q.ListExperimentTrainingRequirementsFunc(ctx, experimentID)
+}
+
+func (q *Querier) CreateCondition(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error) {
+	if q.CreateConditionFunc == nil {
+		panic("dbfake: CreateCondition not implemented")
+	}
+	return q.CreateConditionFunc(ctx, arg)
+}
+
+func (q *Querier) GetConditionByID(ctx context.Context, id int64) (db.Condition, error) {
+	if q.GetConditionByIDFunc == nil {
+		panic("dbfake: GetConditionByID not implemented")
+	}
+	return q.GetConditionByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListConditionsByLab(ctx context.Context, labID int64) ([]db.Condition, error) {
+	if q.ListConditionsByLabFunc == nil {
+		panic("dbfake: ListConditionsByLab not implemented")
+	}
+	return q.ListConditionsByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateCondition(ctx context.Context, arg db.UpdateConditionParams) (db.Condition, error) {
+	if q.UpdateConditionFunc == nil {
+		panic("dbfake: UpdateCondition not implemented")
+	}
+	return q.UpdateConditionFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateCondition(ctx context.Context, id int64) error {
+	if q.DeactivateConditionFunc == nil {
+		panic("dbfake: DeactivateCondition not implemented")
+	}
+	return q.DeactivateConditionFunc(ctx, id)
+}
+
+func (q *Querier) CreateConditionValue(ctx context.Context, arg db.CreateConditionValueParams) (db.ConditionValue, error) {
+	if q.CreateConditionValueFunc == nil {
+		panic("dbfake: CreateConditionValue not implemented")
+	}
+	return q.CreateConditionValueFunc(ctx, arg)
+}
+
+func (q *Querier) ListConditionValuesByCondition(ctx context.Context, conditionID int64) ([]db.ConditionValue, error) {
+	if q.ListConditionValuesByConditionFunc == nil {
+		panic("dbfake: ListConditionValuesByCondition not implemented")
+	}
+	return q.ListConditionValuesByConditionFunc(ctx, conditionID)
+}
+
+func (q *Querier) UpdateConditionValue(ctx context.Context, arg db.UpdateConditionValueParams) (db.ConditionValue, error) {
+	if q.UpdateConditionValueFunc == nil {
+		panic("dbfake: UpdateConditionValue not implemented")
+	}
+	return q.UpdateConditionValueFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateConditionValue(ctx context.Context, id int64) error {
+	if q.DeactivateConditionValueFunc == nil {
+		panic("dbfake: DeactivateConditionValue not implemented")
+	}
+	return q.DeactivateConditionValueFunc(ctx, id)
+}
+
+func (q *Querier) CreateEquipment(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error) {
+	if q.CreateEquipmentFunc == nil {
+		panic("dbfake: CreateEquipment not implemented")
+	}
+	return q.CreateEquipmentFunc(ctx, arg)
+}
+
+func (q *Querier) GetEquipmentByID(ctx context.Context, id int64) (db.Equipment, error) {
+	if q.GetEquipmentByIDFunc == nil {
+		panic("dbfake: GetEquipmentByID not implemented")
+	}
+	return q.GetEquipmentByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListEquipmentByLab(ctx context.Context, labID int64) ([]db.Equipment, error) {
+	if q.ListEquipmentByLabFunc == nil {
+		panic("dbfake: ListEquipmentByLab not implemented")
+	}
+	return q.ListEquipmentByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateEquipment(ctx context.Context, arg db.UpdateEquipmentParams) (db.Equipment, error) {
+	if q.UpdateEquipmentFunc == nil {
+		panic("dbfake: UpdateEquipment not implemented")
+	}
+	return q.UpdateEquipmentFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateEquipment(ctx context.Context, id int64) error {
+	if q.DeactivateEquipmentFunc == nil {
+		panic("dbfake: DeactivateEquipment not implemented")
+	}
+	return q.DeactivateEquipmentFunc(ctx, id)
+}
+
+func (q *Querier) CreateExperimentRole(ctx context.Context, arg db.CreateExperimentRoleParams) (db.ExperimentRole, error) {
+	if q.CreateExperimentRoleFunc == nil {
+		panic("dbfake: CreateExperimentRole not implemented")
+	}
+	return q.CreateExperimentRoleFunc(ctx, arg)
+}
+
+func (q *Querier) GetExperimentRoleByID(ctx context.Context, id int64) (db.ExperimentRole, error) {
+	if q.GetExperimentRoleByIDFunc == nil {
+		panic("dbfake: GetExperimentRoleByID not implemented")
+	}
+	return q.GetExperimentRoleByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]db.ExperimentRole, error) {
+	if q.ListExperimentRolesByLabFunc == nil {
+		panic("dbfake: ListExperimentRolesByLab not implemented")
+	}
+	return q.ListExperimentRolesByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateExperimentRole(ctx context.Context, arg db.UpdateExperimentRoleParams) (db.ExperimentRole, error) {
+	if q.UpdateExperimentRoleFunc == nil {
+		panic("dbfake: UpdateExperimentRole not implemented")
+	}
+	return q.UpdateExperimentRoleFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateExperimentRole(ctx context.Context, id int64) error {
+	if q.DeactivateExperimentRoleFunc == nil {
+		panic("dbfake: DeactivateExperimentRole not implemented")
+	}
+	return q.DeactivateExperimentRoleFunc(ctx, id)
 }

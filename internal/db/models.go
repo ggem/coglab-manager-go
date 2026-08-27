@@ -49,6 +49,78 @@ type Child struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Condition struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ConditionValue struct {
+	ID            int64              `json:"id"`
+	ConditionID   int64              `json:"condition_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Equipment struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	Quantity      int16              `json:"quantity"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Experiment struct {
+	ID                 int64              `json:"id"`
+	LabID              int64              `json:"lab_id"`
+	Name               string             `json:"name"`
+	Description        string             `json:"description"`
+	Sessions           int16              `json:"sessions"`
+	AgeRangeMinMonths  pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths  pgtype.Numeric     `json:"age_range_max_months"`
+	StartDate          pgtype.Date        `json:"start_date"`
+	EndDate            pgtype.Date        `json:"end_date"`
+	Status             string             `json:"status"`
+	DurationMinutes    int16              `json:"duration_minutes"`
+	FilterPremies      bool               `json:"filter_premies"`
+	FilterMinLanguages int16              `json:"filter_min_languages"`
+	FilterLanguages    []string           `json:"filter_languages"`
+	DeactivatedAt      pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExperimentCondition struct {
+	ExperimentID int64 `json:"experiment_id"`
+	ConditionID  int64 `json:"condition_id"`
+}
+
+type ExperimentEquipmentRequirement struct {
+	ExperimentID int64 `json:"experiment_id"`
+	EquipmentID  int64 `json:"equipment_id"`
+}
+
+type ExperimentRole struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExperimentTrainingRequirement struct {
+	ExperimentID     int64 `json:"experiment_id"`
+	ExperimentRoleID int64 `json:"experiment_role_id"`
+}
+
 type Family struct {
 	ID                     int64              `json:"id"`
 	Address                string             `json:"address"`
