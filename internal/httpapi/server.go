@@ -112,6 +112,10 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/", s.handleCreateExperimentRole)
 				r.Get("/", s.handleListExperimentRolesByLab)
 			})
+			r.Route("/experiments", func(r chi.Router) {
+				r.Post("/", s.handleCreateExperiment)
+				r.Get("/", s.handleListExperimentsByLab)
+			})
 		})
 
 		r.Route("/conditions/{conditionID}", func(r chi.Router) {
@@ -140,6 +144,11 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/deactivate", s.handleDeactivateExperimentRole)
 		})
 
+		r.Route("/experiments/{experimentID}", func(r chi.Router) {
+			r.Get("/", s.handleGetExperiment)
+			r.Put("/", s.handleUpdateExperiment)
+			r.Post("/deactivate", s.handleDeactivateExperiment)
+		})
 	})
 
 	return r
