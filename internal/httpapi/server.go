@@ -90,6 +90,56 @@ func (s *Server) Routes() http.Handler {
 				})
 			})
 		})
+
+		// Lab-scoped lookup and experiment resources are created and listed
+		// under /labs/{labID}/..., then addressed directly by their own ID
+		// everywhere else -- the same nested-then-flat pattern as
+		// families/{familyID}/children vs. children/{childID}. There's no
+		// /labs resource or lab-membership authorization yet (see M1's
+		// lab_memberships table): any authenticated user can currently name
+		// any lab ID here. That gap applies to the API as a whole, not just
+		// this domain, and is flagged for a dedicated pass.
+		r.Route("/labs/{labID}", func(r chi.Router) {
+			r.Route("/conditions", func(r chi.Router) {
+				r.Post("/", s.handleCreateCondition)
+				r.Get("/", s.handleListConditionsByLab)
+			})
+			r.Route("/equipment", func(r chi.Router) {
+				r.Post("/", s.handleCreateEquipment)
+				r.Get("/", s.handleListEquipmentByLab)
+			})
+			r.Route("/experiment-roles", func(r chi.Router) {
+				r.Post("/", s.handleCreateExperimentRole)
+				r.Get("/", s.handleListExperimentRolesByLab)
+			})
+		})
+
+		r.Route("/conditions/{conditionID}", func(r chi.Router) {
+			r.Get("/", s.handleGetCondition)
+			r.Put("/", s.handleUpdateCondition)
+			r.Post("/deactivate", s.handleDeactivateCondition)
+			r.Route("/values", func(r chi.Router) {
+				r.Post("/", s.handleCreateConditionValue)
+				r.Get("/", s.handleListConditionValuesByCondition)
+			})
+		})
+		r.Route("/condition-values/{valueID}", func(r chi.Router) {
+			r.Put("/", s.handleUpdateConditionValue)
+			r.Post("/deactivate", s.handleDeactivateConditionValue)
+		})
+
+		r.Route("/equipment/{equipmentID}", func(r chi.Router) {
+			r.Get("/", s.handleGetEquipment)
+			r.Put("/", s.handleUpdateEquipment)
+			r.Post("/deactivate", s.handleDeactivateEquipment)
+		})
+
+		r.Route("/experiment-roles/{roleID}", func(r chi.Router) {
+			r.Get("/", s.handleGetExperimentRole)
+			r.Put("/", s.handleUpdateExperimentRole)
+			r.Post("/deactivate", s.handleDeactivateExperimentRole)
+		})
+
 	})
 
 	return r
