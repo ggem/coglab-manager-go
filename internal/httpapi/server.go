@@ -57,6 +57,7 @@ func (s *Server) Routes() http.Handler {
 
 		r.Route("/families", func(r chi.Router) {
 			r.Post("/", s.handleCreateFamily)
+			r.Get("/search", s.handleSearchFamilies)
 			r.Route("/{familyID}", func(r chi.Router) {
 				r.Get("/", s.handleGetFamily)
 				r.Put("/", s.handleUpdateFamily)
