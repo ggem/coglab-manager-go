@@ -123,3 +123,30 @@ func (s *Server) handleUpdateFamily(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, familyToResponse(family))
 }
+
+func (s *Server) handleSearchFamilies(w http.ResponseWriter, r *http.Request) {
+	limit, ok := queryLimit(w, r, defaultSearchLimit, maxSearchLimit)
+	if !ok {
+		return
+	}
+
+	families, err := s.queries.SearchFamilies(r.Context(), db.SearchFamiliesParams{
+		NameQuery:   queryString(r, "q"),
+		Email:       queryString(r, "email"),
+		PhoneNumber: queryString(r, "phone_number"),
+		Address:     queryString(r, "address"),
+		City:        queryString(r, "city"),
+		Zip:         queryString(r, "zip"),
+		LimitCount:  limit,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]familyResponse, len(families))
+	for i, f := range families {
+		resp[i] = familyToResponse(f)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}

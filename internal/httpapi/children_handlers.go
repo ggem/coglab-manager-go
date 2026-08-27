@@ -294,3 +294,59 @@ func (s *Server) handleDeactivateChild(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) handleSearchChildren(w http.ResponseWriter, r *http.Request) {
+	minBirthDate, err := ptrToDate(queryString(r, "min_birth_date"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid min_birth_date")
+		return
+	}
+	maxBirthDate, err := ptrToDate(queryString(r, "max_birth_date"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid max_birth_date")
+		return
+	}
+	twin, ok := queryBoolPtr(w, r, "twin")
+	if !ok {
+		return
+	}
+	premie, ok := queryBoolPtr(w, r, "premie")
+	if !ok {
+		return
+	}
+	familyID, ok := queryInt64Ptr(w, r, "family_id")
+	if !ok {
+		return
+	}
+	includeDeactivated, ok := queryBool(w, r, "include_deactivated", false)
+	if !ok {
+		return
+	}
+	limit, ok := queryLimit(w, r, defaultSearchLimit, maxSearchLimit)
+	if !ok {
+		return
+	}
+
+	children, err := s.queries.SearchChildren(r.Context(), db.SearchChildrenParams{
+		NameQuery:          queryString(r, "q"),
+		MinBirthDate:       minBirthDate,
+		MaxBirthDate:       maxBirthDate,
+		Sex:                queryString(r, "sex"),
+		Twin:               twin,
+		Premie:             premie,
+		Language:           queryString(r, "language"),
+		FamilyID:           familyID,
+		IncludeDeactivated: includeDeactivated,
+		LimitCount:         limit,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]childResponse, len(children))
+	for i, c := range children {
+		resp[i] = childToResponse(c)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}

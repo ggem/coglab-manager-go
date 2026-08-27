@@ -77,13 +77,16 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/", s.handleDeleteGuardian)
 		})
 
-		r.Route("/children/{childID}", func(r chi.Router) {
-			r.Get("/", s.handleGetChild)
-			r.Put("/", s.handleUpdateChild)
-			r.Post("/deactivate", s.handleDeactivateChild)
-			r.Route("/notes", func(r chi.Router) {
-				r.Post("/", s.handleCreateChildNote)
-				r.Get("/", s.handleListChildNotes)
+		r.Route("/children", func(r chi.Router) {
+			r.Get("/search", s.handleSearchChildren)
+			r.Route("/{childID}", func(r chi.Router) {
+				r.Get("/", s.handleGetChild)
+				r.Put("/", s.handleUpdateChild)
+				r.Post("/deactivate", s.handleDeactivateChild)
+				r.Route("/notes", func(r chi.Router) {
+					r.Post("/", s.handleCreateChildNote)
+					r.Get("/", s.handleListChildNotes)
+				})
 			})
 		})
 	})
