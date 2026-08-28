@@ -10,6 +10,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Appointment struct {
+	ID                int64              `json:"id"`
+	ExperimentID      int64              `json:"experiment_id"`
+	ChildID           int64              `json:"child_id"`
+	Session           int16              `json:"session"`
+	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing     string             `json:"sibling_coming"`
+	ScheduleDate      pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AppointmentExperimenter struct {
+	ID               int64 `json:"id"`
+	AppointmentID    int64 `json:"appointment_id"`
+	UserID           int64 `json:"user_id"`
+	ExperimentRoleID int64 `json:"experiment_role_id"`
+	IsGreeter        bool  `json:"is_greeter"`
+}
+
 type AuditEvent struct {
 	ID          int64              `json:"id"`
 	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
@@ -114,6 +138,7 @@ type ExperimentRole struct {
 	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	IsSitterRole  bool               `json:"is_sitter_role"`
 }
 
 type ExperimentTrainingRequirement struct {
@@ -154,6 +179,35 @@ type Lab struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type LabAvailabilityGeneral struct {
+	ID            int64              `json:"id"`
+	UserID        int64              `json:"user_id"`
+	LabID         int64              `json:"lab_id"`
+	Weekday       int16              `json:"weekday"`
+	StartTime     pgtype.Time        `json:"start_time"`
+	EndTime       pgtype.Time        `json:"end_time"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LabAvailabilitySpecific struct {
+	ID            int64              `json:"id"`
+	UserID        int64              `json:"user_id"`
+	LabID         int64              `json:"lab_id"`
+	Date          pgtype.Date        `json:"date"`
+	StartTime     pgtype.Time        `json:"start_time"`
+	EndTime       pgtype.Time        `json:"end_time"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LabMemberTraining struct {
+	UserID           int64 `json:"user_id"`
+	ExperimentRoleID int64 `json:"experiment_role_id"`
+}
+
 type LabMembership struct {
 	ID        int64              `json:"id"`
 	UserID    int64              `json:"user_id"`
@@ -184,6 +238,18 @@ type Role struct {
 	Description string             `json:"description"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ScheduleBlocking struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Date          pgtype.Date        `json:"date"`
+	StartTime     pgtype.Time        `json:"start_time"`
+	EndTime       pgtype.Time        `json:"end_time"`
+	Reason        string             `json:"reason"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Session struct {

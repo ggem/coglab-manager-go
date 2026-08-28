@@ -87,6 +87,41 @@ type Querier struct {
 	ListExperimentRolesByLabFunc func(ctx context.Context, labID int64) ([]db.ExperimentRole, error)
 	UpdateExperimentRoleFunc     func(ctx context.Context, arg db.UpdateExperimentRoleParams) (db.ExperimentRole, error)
 	DeactivateExperimentRoleFunc func(ctx context.Context, id int64) error
+	SetExperimentRoleSitterFunc  func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error)
+	GetSitterRoleForLabFunc      func(ctx context.Context, labID int64) (db.ExperimentRole, error)
+
+	AddLabMemberTrainingFunc          func(ctx context.Context, arg db.AddLabMemberTrainingParams) error
+	RemoveLabMemberTrainingFunc       func(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error
+	ListLabMemberTrainingsForRoleFunc func(ctx context.Context, experimentRoleID int64) ([]db.User, error)
+	ListLabMemberTrainingsForUserFunc func(ctx context.Context, userID int64) ([]db.ExperimentRole, error)
+
+	CreateLabAvailabilityGeneralFunc     func(ctx context.Context, arg db.CreateLabAvailabilityGeneralParams) (db.LabAvailabilityGeneral, error)
+	GetLabAvailabilityGeneralByIDFunc    func(ctx context.Context, id int64) (db.LabAvailabilityGeneral, error)
+	ListLabAvailabilityGeneralByUserFunc func(ctx context.Context, arg db.ListLabAvailabilityGeneralByUserParams) ([]db.LabAvailabilityGeneral, error)
+	DeactivateLabAvailabilityGeneralFunc func(ctx context.Context, id int64) error
+	ListLabAvailabilityGeneralByLabFunc  func(ctx context.Context, labID int64) ([]db.LabAvailabilityGeneral, error)
+
+	CreateLabAvailabilitySpecificFunc           func(ctx context.Context, arg db.CreateLabAvailabilitySpecificParams) (db.LabAvailabilitySpecific, error)
+	GetLabAvailabilitySpecificByIDFunc          func(ctx context.Context, id int64) (db.LabAvailabilitySpecific, error)
+	ListLabAvailabilitySpecificByUserFunc       func(ctx context.Context, arg db.ListLabAvailabilitySpecificByUserParams) ([]db.LabAvailabilitySpecific, error)
+	DeactivateLabAvailabilitySpecificFunc       func(ctx context.Context, id int64) error
+	ListLabAvailabilitySpecificForDateRangeFunc func(ctx context.Context, arg db.ListLabAvailabilitySpecificForDateRangeParams) ([]db.LabAvailabilitySpecific, error)
+
+	CreateScheduleBlockingFunc            func(ctx context.Context, arg db.CreateScheduleBlockingParams) (db.ScheduleBlocking, error)
+	GetScheduleBlockingByIDFunc           func(ctx context.Context, id int64) (db.ScheduleBlocking, error)
+	ListScheduleBlockingsByLabFunc        func(ctx context.Context, labID int64) ([]db.ScheduleBlocking, error)
+	ListScheduleBlockingsForDateRangeFunc func(ctx context.Context, arg db.ListScheduleBlockingsForDateRangeParams) ([]db.ScheduleBlocking, error)
+	DeactivateScheduleBlockingFunc        func(ctx context.Context, id int64) error
+
+	CreateAppointmentFunc   func(ctx context.Context, arg db.CreateAppointmentParams) (db.Appointment, error)
+	GetAppointmentByIDFunc  func(ctx context.Context, id int64) (db.Appointment, error)
+	GetAppointmentLabIDFunc func(ctx context.Context, id int64) (int64, error)
+	ScheduleAppointmentFunc func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error)
+
+	CreateAppointmentExperimenterFunc                func(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error)
+	ListAppointmentExperimentersFunc                 func(ctx context.Context, appointmentID int64) ([]db.AppointmentExperimenter, error)
+	ListBusyAppointmentExperimentersForDateRangeFunc func(ctx context.Context, arg db.ListBusyAppointmentExperimentersForDateRangeParams) ([]db.ListBusyAppointmentExperimentersForDateRangeRow, error)
+	ListBusyEquipmentForDateRangeFunc                func(ctx context.Context, arg db.ListBusyEquipmentForDateRangeParams) ([]db.ListBusyEquipmentForDateRangeRow, error)
 }
 
 var _ db.Querier = (*Querier)(nil)
@@ -523,4 +558,207 @@ func (q *Querier) DeactivateExperimentRole(ctx context.Context, id int64) error 
 		panic("dbfake: DeactivateExperimentRole not implemented")
 	}
 	return q.DeactivateExperimentRoleFunc(ctx, id)
+}
+
+func (q *Querier) SetExperimentRoleSitter(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error) {
+	if q.SetExperimentRoleSitterFunc == nil {
+		panic("dbfake: SetExperimentRoleSitter not implemented")
+	}
+	return q.SetExperimentRoleSitterFunc(ctx, arg)
+}
+
+func (q *Querier) GetSitterRoleForLab(ctx context.Context, labID int64) (db.ExperimentRole, error) {
+	if q.GetSitterRoleForLabFunc == nil {
+		panic("dbfake: GetSitterRoleForLab not implemented")
+	}
+	return q.GetSitterRoleForLabFunc(ctx, labID)
+}
+
+func (q *Querier) AddLabMemberTraining(ctx context.Context, arg db.AddLabMemberTrainingParams) error {
+	if q.AddLabMemberTrainingFunc == nil {
+		panic("dbfake: AddLabMemberTraining not implemented")
+	}
+	return q.AddLabMemberTrainingFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveLabMemberTraining(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error {
+	if q.RemoveLabMemberTrainingFunc == nil {
+		panic("dbfake: RemoveLabMemberTraining not implemented")
+	}
+	return q.RemoveLabMemberTrainingFunc(ctx, arg)
+}
+
+func (q *Querier) ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]db.User, error) {
+	if q.ListLabMemberTrainingsForRoleFunc == nil {
+		panic("dbfake: ListLabMemberTrainingsForRole not implemented")
+	}
+	return q.ListLabMemberTrainingsForRoleFunc(ctx, experimentRoleID)
+}
+
+func (q *Querier) ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]db.ExperimentRole, error) {
+	if q.ListLabMemberTrainingsForUserFunc == nil {
+		panic("dbfake: ListLabMemberTrainingsForUser not implemented")
+	}
+	return q.ListLabMemberTrainingsForUserFunc(ctx, userID)
+}
+
+func (q *Querier) CreateLabAvailabilityGeneral(ctx context.Context, arg db.CreateLabAvailabilityGeneralParams) (db.LabAvailabilityGeneral, error) {
+	if q.CreateLabAvailabilityGeneralFunc == nil {
+		panic("dbfake: CreateLabAvailabilityGeneral not implemented")
+	}
+	return q.CreateLabAvailabilityGeneralFunc(ctx, arg)
+}
+
+func (q *Querier) GetLabAvailabilityGeneralByID(ctx context.Context, id int64) (db.LabAvailabilityGeneral, error) {
+	if q.GetLabAvailabilityGeneralByIDFunc == nil {
+		panic("dbfake: GetLabAvailabilityGeneralByID not implemented")
+	}
+	return q.GetLabAvailabilityGeneralByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListLabAvailabilityGeneralByUser(ctx context.Context, arg db.ListLabAvailabilityGeneralByUserParams) ([]db.LabAvailabilityGeneral, error) {
+	if q.ListLabAvailabilityGeneralByUserFunc == nil {
+		panic("dbfake: ListLabAvailabilityGeneralByUser not implemented")
+	}
+	return q.ListLabAvailabilityGeneralByUserFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateLabAvailabilityGeneral(ctx context.Context, id int64) error {
+	if q.DeactivateLabAvailabilityGeneralFunc == nil {
+		panic("dbfake: DeactivateLabAvailabilityGeneral not implemented")
+	}
+	return q.DeactivateLabAvailabilityGeneralFunc(ctx, id)
+}
+
+func (q *Querier) ListLabAvailabilityGeneralByLab(ctx context.Context, labID int64) ([]db.LabAvailabilityGeneral, error) {
+	if q.ListLabAvailabilityGeneralByLabFunc == nil {
+		panic("dbfake: ListLabAvailabilityGeneralByLab not implemented")
+	}
+	return q.ListLabAvailabilityGeneralByLabFunc(ctx, labID)
+}
+
+func (q *Querier) CreateLabAvailabilitySpecific(ctx context.Context, arg db.CreateLabAvailabilitySpecificParams) (db.LabAvailabilitySpecific, error) {
+	if q.CreateLabAvailabilitySpecificFunc == nil {
+		panic("dbfake: CreateLabAvailabilitySpecific not implemented")
+	}
+	return q.CreateLabAvailabilitySpecificFunc(ctx, arg)
+}
+
+func (q *Querier) GetLabAvailabilitySpecificByID(ctx context.Context, id int64) (db.LabAvailabilitySpecific, error) {
+	if q.GetLabAvailabilitySpecificByIDFunc == nil {
+		panic("dbfake: GetLabAvailabilitySpecificByID not implemented")
+	}
+	return q.GetLabAvailabilitySpecificByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListLabAvailabilitySpecificByUser(ctx context.Context, arg db.ListLabAvailabilitySpecificByUserParams) ([]db.LabAvailabilitySpecific, error) {
+	if q.ListLabAvailabilitySpecificByUserFunc == nil {
+		panic("dbfake: ListLabAvailabilitySpecificByUser not implemented")
+	}
+	return q.ListLabAvailabilitySpecificByUserFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateLabAvailabilitySpecific(ctx context.Context, id int64) error {
+	if q.DeactivateLabAvailabilitySpecificFunc == nil {
+		panic("dbfake: DeactivateLabAvailabilitySpecific not implemented")
+	}
+	return q.DeactivateLabAvailabilitySpecificFunc(ctx, id)
+}
+
+func (q *Querier) ListLabAvailabilitySpecificForDateRange(ctx context.Context, arg db.ListLabAvailabilitySpecificForDateRangeParams) ([]db.LabAvailabilitySpecific, error) {
+	if q.ListLabAvailabilitySpecificForDateRangeFunc == nil {
+		panic("dbfake: ListLabAvailabilitySpecificForDateRange not implemented")
+	}
+	return q.ListLabAvailabilitySpecificForDateRangeFunc(ctx, arg)
+}
+
+func (q *Querier) CreateScheduleBlocking(ctx context.Context, arg db.CreateScheduleBlockingParams) (db.ScheduleBlocking, error) {
+	if q.CreateScheduleBlockingFunc == nil {
+		panic("dbfake: CreateScheduleBlocking not implemented")
+	}
+	return q.CreateScheduleBlockingFunc(ctx, arg)
+}
+
+func (q *Querier) GetScheduleBlockingByID(ctx context.Context, id int64) (db.ScheduleBlocking, error) {
+	if q.GetScheduleBlockingByIDFunc == nil {
+		panic("dbfake: GetScheduleBlockingByID not implemented")
+	}
+	return q.GetScheduleBlockingByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListScheduleBlockingsByLab(ctx context.Context, labID int64) ([]db.ScheduleBlocking, error) {
+	if q.ListScheduleBlockingsByLabFunc == nil {
+		panic("dbfake: ListScheduleBlockingsByLab not implemented")
+	}
+	return q.ListScheduleBlockingsByLabFunc(ctx, labID)
+}
+
+func (q *Querier) ListScheduleBlockingsForDateRange(ctx context.Context, arg db.ListScheduleBlockingsForDateRangeParams) ([]db.ScheduleBlocking, error) {
+	if q.ListScheduleBlockingsForDateRangeFunc == nil {
+		panic("dbfake: ListScheduleBlockingsForDateRange not implemented")
+	}
+	return q.ListScheduleBlockingsForDateRangeFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateScheduleBlocking(ctx context.Context, id int64) error {
+	if q.DeactivateScheduleBlockingFunc == nil {
+		panic("dbfake: DeactivateScheduleBlocking not implemented")
+	}
+	return q.DeactivateScheduleBlockingFunc(ctx, id)
+}
+
+func (q *Querier) CreateAppointment(ctx context.Context, arg db.CreateAppointmentParams) (db.Appointment, error) {
+	if q.CreateAppointmentFunc == nil {
+		panic("dbfake: CreateAppointment not implemented")
+	}
+	return q.CreateAppointmentFunc(ctx, arg)
+}
+
+func (q *Querier) GetAppointmentByID(ctx context.Context, id int64) (db.Appointment, error) {
+	if q.GetAppointmentByIDFunc == nil {
+		panic("dbfake: GetAppointmentByID not implemented")
+	}
+	return q.GetAppointmentByIDFunc(ctx, id)
+}
+
+func (q *Querier) GetAppointmentLabID(ctx context.Context, id int64) (int64, error) {
+	if q.GetAppointmentLabIDFunc == nil {
+		panic("dbfake: GetAppointmentLabID not implemented")
+	}
+	return q.GetAppointmentLabIDFunc(ctx, id)
+}
+
+func (q *Querier) ScheduleAppointment(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error) {
+	if q.ScheduleAppointmentFunc == nil {
+		panic("dbfake: ScheduleAppointment not implemented")
+	}
+	return q.ScheduleAppointmentFunc(ctx, arg)
+}
+
+func (q *Querier) CreateAppointmentExperimenter(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error) {
+	if q.CreateAppointmentExperimenterFunc == nil {
+		panic("dbfake: CreateAppointmentExperimenter not implemented")
+	}
+	return q.CreateAppointmentExperimenterFunc(ctx, arg)
+}
+
+func (q *Querier) ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]db.AppointmentExperimenter, error) {
+	if q.ListAppointmentExperimentersFunc == nil {
+		panic("dbfake: ListAppointmentExperimenters not implemented")
+	}
+	return q.ListAppointmentExperimentersFunc(ctx, appointmentID)
+}
+
+func (q *Querier) ListBusyAppointmentExperimentersForDateRange(ctx context.Context, arg db.ListBusyAppointmentExperimentersForDateRangeParams) ([]db.ListBusyAppointmentExperimentersForDateRangeRow, error) {
+	if q.ListBusyAppointmentExperimentersForDateRangeFunc == nil {
+		panic("dbfake: ListBusyAppointmentExperimentersForDateRange not implemented")
+	}
+	return q.ListBusyAppointmentExperimentersForDateRangeFunc(ctx, arg)
+}
+
+func (q *Querier) ListBusyEquipmentForDateRange(ctx context.Context, arg db.ListBusyEquipmentForDateRangeParams) ([]db.ListBusyEquipmentForDateRangeRow, error) {
+	if q.ListBusyEquipmentForDateRangeFunc == nil {
+		panic("dbfake: ListBusyEquipmentForDateRange not implemented")
+	}
+	return q.ListBusyEquipmentForDateRangeFunc(ctx, arg)
 }

@@ -118,6 +118,31 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/", s.handleCreateExperiment)
 				r.Get("/", s.handleListExperimentsByLab)
 			})
+			r.Route("/availability/general", func(r chi.Router) {
+				r.Post("/", s.handleCreateLabAvailabilityGeneral)
+				r.Get("/", s.handleListLabAvailabilityGeneral)
+			})
+			r.Route("/availability/specific", func(r chi.Router) {
+				r.Post("/", s.handleCreateLabAvailabilitySpecific)
+				r.Get("/", s.handleListLabAvailabilitySpecific)
+			})
+			r.Route("/schedule-blockings", func(r chi.Router) {
+				r.Post("/", s.handleCreateScheduleBlocking)
+				r.Get("/", s.handleListScheduleBlockingsByLab)
+			})
+		})
+
+		r.Route("/availability/general/{availabilityID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForLabAvailabilityGeneral)
+			r.Post("/deactivate", s.handleDeactivateLabAvailabilityGeneral)
+		})
+		r.Route("/availability/specific/{availabilityID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForLabAvailabilitySpecific)
+			r.Post("/deactivate", s.handleDeactivateLabAvailabilitySpecific)
+		})
+		r.Route("/schedule-blockings/{blockingID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForScheduleBlocking)
+			r.Post("/deactivate", s.handleDeactivateScheduleBlocking)
 		})
 
 		r.Route("/conditions/{conditionID}", func(r chi.Router) {
@@ -148,6 +173,12 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/", s.handleGetExperimentRole)
 			r.Put("/", s.handleUpdateExperimentRole)
 			r.Post("/deactivate", s.handleDeactivateExperimentRole)
+			r.Post("/set-sitter", s.handleSetExperimentRoleSitter)
+			r.Route("/trainings", func(r chi.Router) {
+				r.Post("/", s.handleAddLabMemberTraining)
+				r.Get("/", s.handleListLabMemberTrainingsForRole)
+				r.Delete("/{userID}", s.handleRemoveLabMemberTraining)
+			})
 		})
 
 		r.Route("/experiments/{experimentID}", func(r chi.Router) {
@@ -170,6 +201,13 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/", s.handleListExperimentTrainingRequirements)
 				r.Delete("/{roleID}", s.handleRemoveExperimentTrainingRequirement)
 			})
+			r.Post("/appointments", s.handleCreateAppointment)
+		})
+
+		r.Route("/appointments/{appointmentID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForAppointment)
+			r.Get("/availability", s.handleSearchAppointmentAvailability)
+			r.Post("/schedule", s.handleScheduleAppointment)
 		})
 	})
 

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -55,4 +56,39 @@ func ptrToNumeric(f *float64) (pgtype.Numeric, error) {
 		return pgtype.Numeric{}, err
 	}
 	return n, nil
+}
+
+// clockLayout is a plain "HH:MM" time of day -- used for
+// lab_availability_general/specific and schedule_blockings, which store a
+// not-null time (unlike birth_date etc., there's no meaningful "unset"
+// state for these, so no pointer/nullable variant is needed).
+const clockLayout = "15:04"
+
+func clockTimeToString(t pgtype.Time) string {
+	return durationToClock(pgTimeToDuration(t))
+}
+
+// durationToClock formats a duration-since-midnight as "HH:MM" -- used
+// both for pgtype.Time wire formatting and for internal/scheduling's
+// plain time.Duration results (e.g. CandidateSlot.StartTime), which have
+// no pgtype involved at all.
+func durationToClock(d time.Duration) string {
+	return fmt.Sprintf("%02d:%02d", d/time.Hour, (d%time.Hour)/time.Minute)
+}
+
+func stringToClockTime(s string) (pgtype.Time, error) {
+	t, err := time.Parse(clockLayout, s)
+	if err != nil {
+		return pgtype.Time{}, err
+	}
+	d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute
+	return pgtype.Time{Microseconds: int64(d / time.Microsecond), Valid: true}, nil
+}
+
+// pgTimeToDuration converts a pgtype.Time (already a duration-since-
+// midnight internally) to a plain time.Duration -- the representation
+// internal/scheduling.TimeRange uses, keeping that package free of pgx
+// awareness.
+func pgTimeToDuration(t pgtype.Time) time.Duration {
+	return time.Duration(t.Microseconds) * time.Microsecond
 }
