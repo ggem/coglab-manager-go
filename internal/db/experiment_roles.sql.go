@@ -11,7 +11,7 @@ import (
 
 const createExperimentRole = `-- name: CreateExperimentRole :one
 insert into experiment_roles (lab_id, name) values ($1, $2)
-returning id, lab_id, name, deactivated_at, created_at, updated_at
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
 `
 
 type CreateExperimentRoleParams struct {
@@ -29,6 +29,7 @@ func (q *Queries) CreateExperimentRole(ctx context.Context, arg CreateExperiment
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSitterRole,
 	)
 	return i, err
 }
@@ -43,7 +44,7 @@ func (q *Queries) DeactivateExperimentRole(ctx context.Context, id int64) error 
 }
 
 const getExperimentRoleByID = `-- name: GetExperimentRoleByID :one
-select id, lab_id, name, deactivated_at, created_at, updated_at from experiment_roles where id = $1
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where id = $1
 `
 
 func (q *Queries) GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error) {
@@ -56,12 +57,32 @@ func (q *Queries) GetExperimentRoleByID(ctx context.Context, id int64) (Experime
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSitterRole,
+	)
+	return i, err
+}
+
+const getSitterRoleForLab = `-- name: GetSitterRoleForLab :one
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where lab_id = $1 and is_sitter_role
+`
+
+func (q *Queries) GetSitterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error) {
+	row := q.db.QueryRow(ctx, getSitterRoleForLab, labID)
+	var i ExperimentRole
+	err := row.Scan(
+		&i.ID,
+		&i.LabID,
+		&i.Name,
+		&i.DeactivatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSitterRole,
 	)
 	return i, err
 }
 
 const listExperimentRolesByLab = `-- name: ListExperimentRolesByLab :many
-select id, lab_id, name, deactivated_at, created_at, updated_at from experiment_roles where lab_id = $1 order by name
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where lab_id = $1 order by name
 `
 
 func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]ExperimentRole, error) {
@@ -80,6 +101,7 @@ func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]
 			&i.DeactivatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsSitterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -91,9 +113,40 @@ func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]
 	return items, nil
 }
 
+const setExperimentRoleSitter = `-- name: SetExperimentRoleSitter :one
+update experiment_roles set is_sitter_role = $1
+where id = $2
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
+`
+
+type SetExperimentRoleSitterParams struct {
+	IsSitterRole bool  `json:"is_sitter_role"`
+	ID           int64 `json:"id"`
+}
+
+// Dedicated action rather than part of UpdateExperimentRole: designating
+// the sitter role is a distinct decision from renaming a role. The
+// partial unique index (at most one sitter role per lab) rejects setting
+// a second role true while one's already set -- the caller must unset the
+// old one first, this doesn't swap automatically.
+func (q *Queries) SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error) {
+	row := q.db.QueryRow(ctx, setExperimentRoleSitter, arg.IsSitterRole, arg.ID)
+	var i ExperimentRole
+	err := row.Scan(
+		&i.ID,
+		&i.LabID,
+		&i.Name,
+		&i.DeactivatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSitterRole,
+	)
+	return i, err
+}
+
 const updateExperimentRole = `-- name: UpdateExperimentRole :one
 update experiment_roles set name = $1 where id = $2
-returning id, lab_id, name, deactivated_at, created_at, updated_at
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
 `
 
 type UpdateExperimentRoleParams struct {
@@ -111,6 +164,7 @@ func (q *Queries) UpdateExperimentRole(ctx context.Context, arg UpdateExperiment
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSitterRole,
 	)
 	return i, err
 }

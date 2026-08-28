@@ -225,3 +225,61 @@ func TestHandleDeactivateExperimentRole_Success(t *testing.T) {
 		t.Errorf("deactivated ID = %d, want 3", deactivatedID)
 	}
 }
+
+func TestHandleSetExperimentRoleSitter_Success(t *testing.T) {
+	var captured db.SetExperimentRoleSitterParams
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
+		SetExperimentRoleSitterFunc: func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error) {
+			captured = arg
+			return db.ExperimentRole{ID: arg.ID, LabID: 1, IsSitterRole: arg.IsSitterRole}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: true})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if captured.ID != 3 || !captured.IsSitterRole {
+		t.Errorf("SetExperimentRoleSitter params = %+v", captured)
+	}
+	got := decodeBody[experimentRoleResponse](t, rec)
+	if !got.IsSitterRole {
+		t.Errorf("response IsSitterRole = false, want true")
+	}
+}
+
+func TestHandleSetExperimentRoleSitter_AlreadyOneInLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
+		SetExperimentRoleSitterFunc: func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error) {
+			return db.ExperimentRole{}, &pgconn.PgError{Code: pgUniqueViolation}
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: true})
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestHandleSetExperimentRoleSitter_InvalidID(t *testing.T) {
+	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/not-a-number/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: true})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}

@@ -118,6 +118,81 @@ func (s *Server) requireLabMemberForExperimentRole(next http.Handler) http.Handl
 	})
 }
 
+func (s *Server) requireLabMemberForLabAvailabilityGeneral(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "availabilityID")
+		if !ok {
+			return
+		}
+		row, err := s.queries.GetLabAvailabilityGeneralByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, row.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLabMemberForLabAvailabilitySpecific(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "availabilityID")
+		if !ok {
+			return
+		}
+		row, err := s.queries.GetLabAvailabilitySpecificByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, row.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLabMemberForScheduleBlocking(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "blockingID")
+		if !ok {
+			return
+		}
+		blocking, err := s.queries.GetScheduleBlockingByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, blocking.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireLabMemberForAppointment gates /appointments/{appointmentID}/...:
+// appointments has no lab_id of its own, so it's resolved via the
+// experiment (GetAppointmentLabID).
+func (s *Server) requireLabMemberForAppointment(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "appointmentID")
+		if !ok {
+			return
+		}
+		labID, err := s.queries.GetAppointmentLabID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, labID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireLabMemberForExperiment also gates the join-management routes
 // nested under /experiments/{experimentID} (attaching conditions,
 // equipment, and training roles): it checks the experiment's own lab, not

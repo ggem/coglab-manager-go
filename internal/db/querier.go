@@ -15,6 +15,9 @@ type Querier interface {
 	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error
 	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error
 	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error
+	AddLabMemberTraining(ctx context.Context, arg AddLabMemberTrainingParams) error
+	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
+	CreateAppointmentExperimenter(ctx context.Context, arg CreateAppointmentExperimenterParams) (AppointmentExperimenter, error)
 	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
 	CreateChild(ctx context.Context, arg CreateChildParams) (Child, error)
 	CreateCondition(ctx context.Context, arg CreateConditionParams) (Condition, error)
@@ -24,8 +27,11 @@ type Querier interface {
 	CreateExperimentRole(ctx context.Context, arg CreateExperimentRoleParams) (ExperimentRole, error)
 	CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error)
 	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
+	CreateLabAvailabilityGeneral(ctx context.Context, arg CreateLabAvailabilityGeneralParams) (LabAvailabilityGeneral, error)
+	CreateLabAvailabilitySpecific(ctx context.Context, arg CreateLabAvailabilitySpecificParams) (LabAvailabilitySpecific, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateRecruitmentSource(ctx context.Context, name string) (RecruitmentSource, error)
+	CreateScheduleBlocking(ctx context.Context, arg CreateScheduleBlockingParams) (ScheduleBlocking, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateChild(ctx context.Context, arg DeactivateChildParams) error
@@ -34,7 +40,14 @@ type Querier interface {
 	DeactivateEquipment(ctx context.Context, id int64) error
 	DeactivateExperiment(ctx context.Context, id int64) error
 	DeactivateExperimentRole(ctx context.Context, id int64) error
+	DeactivateLabAvailabilityGeneral(ctx context.Context, id int64) error
+	DeactivateLabAvailabilitySpecific(ctx context.Context, id int64) error
+	DeactivateScheduleBlocking(ctx context.Context, id int64) error
 	DeleteGuardian(ctx context.Context, id int64) error
+	GetAppointmentByID(ctx context.Context, id int64) (Appointment, error)
+	// For lab-membership authorization (mirrors GetConditionValueLabID):
+	// appointments has no lab_id of its own, so resolve it via the experiment.
+	GetAppointmentLabID(ctx context.Context, id int64) (int64, error)
 	GetChildByID(ctx context.Context, id int64) (Child, error)
 	GetConditionByID(ctx context.Context, id int64) (Condition, error)
 	// Resolves the lab a condition_value belongs to via its parent condition,
@@ -46,11 +59,25 @@ type Querier interface {
 	GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
+	GetLabAvailabilityGeneralByID(ctx context.Context, id int64) (LabAvailabilityGeneral, error)
+	GetLabAvailabilitySpecificByID(ctx context.Context, id int64) (LabAvailabilitySpecific, error)
 	GetLabMembership(ctx context.Context, arg GetLabMembershipParams) (LabMembership, error)
+	GetScheduleBlockingByID(ctx context.Context, id int64) (ScheduleBlocking, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetSitterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
+	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error)
+	// Members already committed to a Pending appointment within this date
+	// range in this lab, with the date and time range they're busy -- one
+	// query for a whole multi-day search rather than one call per candidate
+	// day; the caller groups rows by date in Go.
+	ListBusyAppointmentExperimentersForDateRange(ctx context.Context, arg ListBusyAppointmentExperimentersForDateRangeParams) ([]ListBusyAppointmentExperimentersForDateRangeRow, error)
+	// Equipment already required by a Pending appointment within this date
+	// range in this lab, with the date and time range it's in use -- counted
+	// against each equipment's quantity for that day's availability grid.
+	ListBusyEquipmentForDateRange(ctx context.Context, arg ListBusyEquipmentForDateRangeParams) ([]ListBusyEquipmentForDateRangeRow, error)
 	ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error)
 	ListConditionValuesByCondition(ctx context.Context, conditionID int64) ([]ConditionValue, error)
 	ListConditionsByLab(ctx context.Context, labID int64) ([]Condition, error)
@@ -61,11 +88,38 @@ type Querier interface {
 	ListExperimentTrainingRequirements(ctx context.Context, experimentID int64) ([]ExperimentRole, error)
 	ListExperimentsByLab(ctx context.Context, labID int64) ([]Experiment, error)
 	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
+	// Every active member's general availability windows in a lab, for every
+	// weekday at once: general availability doesn't vary by date (it's a
+	// weekly-recurring schedule, not tied to any particular range), so a
+	// multi-day search needs this fetched only once, not once per candidate
+	// day -- the caller groups by weekday and filters to its candidate
+	// members in Go, and prefers a member's specific-date rows over these
+	// when both exist for the date in question.
+	ListLabAvailabilityGeneralByLab(ctx context.Context, labID int64) ([]LabAvailabilityGeneral, error)
+	ListLabAvailabilityGeneralByUser(ctx context.Context, arg ListLabAvailabilityGeneralByUserParams) ([]LabAvailabilityGeneral, error)
+	ListLabAvailabilitySpecificByUser(ctx context.Context, arg ListLabAvailabilitySpecificByUserParams) ([]LabAvailabilitySpecific, error)
+	// One query for a whole multi-day search range, rather than one call per
+	// candidate day -- the caller groups rows by date in Go.
+	ListLabAvailabilitySpecificForDateRange(ctx context.Context, arg ListLabAvailabilitySpecificForDateRangeParams) ([]LabAvailabilitySpecific, error)
+	// The trained-member pool for one experiment_role -- the candidate list
+	// the scheduling search's backtracking draws from for that role.
+	ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]User, error)
+	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
+	ListScheduleBlockingsByLab(ctx context.Context, labID int64) ([]ScheduleBlocking, error)
+	// One query for a whole multi-day search range, rather than one call per
+	// candidate day -- the caller groups rows by date in Go.
+	ListScheduleBlockingsForDateRange(ctx context.Context, arg ListScheduleBlockingsForDateRangeParams) ([]ScheduleBlocking, error)
 	RemoveExperimentCondition(ctx context.Context, arg RemoveExperimentConditionParams) error
 	RemoveExperimentEquipment(ctx context.Context, arg RemoveExperimentEquipmentParams) error
 	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error
+	RemoveLabMemberTraining(ctx context.Context, arg RemoveLabMemberTrainingParams) error
 	RevokeSession(ctx context.Context, tokenHash []byte) error
+	// Commits a chosen slot: the caller re-validates availability itself
+	// immediately before calling this (defensive re-check against staleness,
+	// since time passes between a search and a commit) -- this query just
+	// writes the result.
+	ScheduleAppointment(ctx context.Context, arg ScheduleAppointmentParams) (Appointment, error)
 	// Every filter is optional (sqlc.narg(x) is null or ...); passing none
 	// returns every child (subject to include_deactivated/limit_count).
 	//
@@ -93,6 +147,12 @@ type Querier interface {
 	// "review a handful of candidates" tool for staff, not a ranked search --
 	// ranking isn't worth the extra query complexity here.
 	SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error)
+	// Dedicated action rather than part of UpdateExperimentRole: designating
+	// the sitter role is a distinct decision from renaming a role. The
+	// partial unique index (at most one sitter role per lab) rejects setting
+	// a second role true while one's already set -- the caller must unset the
+	// old one first, this doesn't swap automatically.
+	SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error)
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
 	UpdateCondition(ctx context.Context, arg UpdateConditionParams) (Condition, error)

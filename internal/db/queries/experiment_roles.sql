@@ -14,3 +14,16 @@ returning *;
 
 -- name: DeactivateExperimentRole :exec
 update experiment_roles set deactivated_at = now() where id = sqlc.arg(id);
+
+-- name: SetExperimentRoleSitter :one
+-- Dedicated action rather than part of UpdateExperimentRole: designating
+-- the sitter role is a distinct decision from renaming a role. The
+-- partial unique index (at most one sitter role per lab) rejects setting
+-- a second role true while one's already set -- the caller must unset the
+-- old one first, this doesn't swap automatically.
+update experiment_roles set is_sitter_role = sqlc.arg(is_sitter_role)
+where id = sqlc.arg(id)
+returning *;
+
+-- name: GetSitterRoleForLab :one
+select * from experiment_roles where lab_id = sqlc.arg(lab_id) and is_sitter_role;

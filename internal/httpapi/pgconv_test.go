@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -66,5 +67,36 @@ func TestNumericConversion_Nil(t *testing.T) {
 	}
 	if got := numericToPtr(pgtype.Numeric{}); got != nil {
 		t.Errorf("numericToPtr(zero value) = %v, want nil", got)
+	}
+}
+
+func TestClockTimeConversion_RoundTrip(t *testing.T) {
+	s := "09:05"
+	pt, err := stringToClockTime(s)
+	if err != nil {
+		t.Fatalf("stringToClockTime: %v", err)
+	}
+	if !pt.Valid {
+		t.Fatal("expected a valid time")
+	}
+	if got := clockTimeToString(pt); got != s {
+		t.Errorf("clockTimeToString = %q, want %q", got, s)
+	}
+}
+
+func TestClockTimeConversion_InvalidFormat(t *testing.T) {
+	if _, err := stringToClockTime("not-a-time"); err == nil {
+		t.Error("expected an error for an invalid time format")
+	}
+}
+
+func TestPgTimeToDuration(t *testing.T) {
+	pt, err := stringToClockTime("09:05")
+	if err != nil {
+		t.Fatalf("stringToClockTime: %v", err)
+	}
+	want := 9*time.Hour + 5*time.Minute
+	if got := pgTimeToDuration(pt); got != want {
+		t.Errorf("pgTimeToDuration = %v, want %v", got, want)
 	}
 }

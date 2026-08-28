@@ -12,6 +12,7 @@ const (
 	ActionExperimentRoleCreated     = "experiment_role.created"
 	ActionExperimentRoleUpdated     = "experiment_role.updated"
 	ActionExperimentRoleDeactivated = "experiment_role.deactivated"
+	ActionExperimentRoleSitterSet   = "experiment_role.sitter_set"
 )
 
 type experimentRoleRequest struct {
@@ -19,22 +20,24 @@ type experimentRoleRequest struct {
 }
 
 type experimentRoleResponse struct {
-	ID          int64     `json:"id"`
-	LabID       int64     `json:"lab_id"`
-	Name        string    `json:"name"`
-	Deactivated bool      `json:"deactivated"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	LabID        int64     `json:"lab_id"`
+	Name         string    `json:"name"`
+	IsSitterRole bool      `json:"is_sitter_role"`
+	Deactivated  bool      `json:"deactivated"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func experimentRoleToResponse(role db.ExperimentRole) experimentRoleResponse {
 	return experimentRoleResponse{
-		ID:          role.ID,
-		LabID:       role.LabID,
-		Name:        role.Name,
-		Deactivated: role.DeactivatedAt.Valid,
-		CreatedAt:   role.CreatedAt.Time,
-		UpdatedAt:   role.UpdatedAt.Time,
+		ID:           role.ID,
+		LabID:        role.LabID,
+		Name:         role.Name,
+		IsSitterRole: role.IsSitterRole,
+		Deactivated:  role.DeactivatedAt.Valid,
+		CreatedAt:    role.CreatedAt.Time,
+		UpdatedAt:    role.UpdatedAt.Time,
 	}
 }
 
@@ -155,4 +158,47 @@ func (s *Server) handleDeactivateExperimentRole(w http.ResponseWriter, r *http.R
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type setExperimentRoleSitterRequest struct {
+	IsSitterRole bool `json:"is_sitter_role"`
+}
+
+// handleSetExperimentRoleSitter designates (or un-designates) a role as
+// the lab's sitter role -- a dedicated action rather than folded into
+// Update, since it's a distinct decision with its own constraint (at most
+// one sitter role per lab, enforced by a partial unique index). Setting a
+// second role true while one's already set is rejected as a conflict; the
+// caller must unset the old one first.
+func (s *Server) handleSetExperimentRoleSitter(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r, "roleID")
+	if !ok {
+		return
+	}
+
+	var req setExperimentRoleSitterRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	role, err := s.queries.SetExperimentRoleSitter(r.Context(), db.SetExperimentRoleSitterParams{
+		ID:           id,
+		IsSitterRole: req.IsSitterRole,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		LabID:       &role.LabID,
+		Action:      ActionExperimentRoleSitterSet,
+		EntityType:  ptr("experiment_role"),
+		EntityID:    &role.ID,
+		Metadata:    map[string]bool{"is_sitter_role": req.IsSitterRole},
+	})
+
+	writeJSON(w, http.StatusOK, experimentRoleToResponse(role))
 }
