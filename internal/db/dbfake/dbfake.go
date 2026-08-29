@@ -113,15 +113,19 @@ type Querier struct {
 	ListScheduleBlockingsForDateRangeFunc func(ctx context.Context, arg db.ListScheduleBlockingsForDateRangeParams) ([]db.ScheduleBlocking, error)
 	DeactivateScheduleBlockingFunc        func(ctx context.Context, id int64) error
 
-	CreateAppointmentFunc   func(ctx context.Context, arg db.CreateAppointmentParams) (db.Appointment, error)
-	GetAppointmentByIDFunc  func(ctx context.Context, id int64) (db.Appointment, error)
-	GetAppointmentLabIDFunc func(ctx context.Context, id int64) (int64, error)
-	ScheduleAppointmentFunc func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error)
+	CreateAppointmentFunc            func(ctx context.Context, arg db.CreateAppointmentParams) (db.Appointment, error)
+	GetAppointmentByIDFunc           func(ctx context.Context, id int64) (db.Appointment, error)
+	GetAppointmentLabIDFunc          func(ctx context.Context, id int64) (int64, error)
+	ListAppointmentsByExperimentFunc func(ctx context.Context, arg db.ListAppointmentsByExperimentParams) ([]db.Appointment, error)
+	ScheduleAppointmentFunc          func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error)
+	ReleaseAppointmentFunc           func(ctx context.Context, id int64) (db.Appointment, error)
 
 	CreateAppointmentExperimenterFunc                func(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error)
 	ListAppointmentExperimentersFunc                 func(ctx context.Context, appointmentID int64) ([]db.AppointmentExperimenter, error)
 	ListBusyAppointmentExperimentersForDateRangeFunc func(ctx context.Context, arg db.ListBusyAppointmentExperimentersForDateRangeParams) ([]db.ListBusyAppointmentExperimentersForDateRangeRow, error)
 	ListBusyEquipmentForDateRangeFunc                func(ctx context.Context, arg db.ListBusyEquipmentForDateRangeParams) ([]db.ListBusyEquipmentForDateRangeRow, error)
+
+	ListEligibleChildrenForExperimentFunc func(ctx context.Context, arg db.ListEligibleChildrenForExperimentParams) ([]db.Child, error)
 }
 
 var _ db.Querier = (*Querier)(nil)
@@ -728,11 +732,25 @@ func (q *Querier) GetAppointmentLabID(ctx context.Context, id int64) (int64, err
 	return q.GetAppointmentLabIDFunc(ctx, id)
 }
 
+func (q *Querier) ListAppointmentsByExperiment(ctx context.Context, arg db.ListAppointmentsByExperimentParams) ([]db.Appointment, error) {
+	if q.ListAppointmentsByExperimentFunc == nil {
+		panic("dbfake: ListAppointmentsByExperiment not implemented")
+	}
+	return q.ListAppointmentsByExperimentFunc(ctx, arg)
+}
+
 func (q *Querier) ScheduleAppointment(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error) {
 	if q.ScheduleAppointmentFunc == nil {
 		panic("dbfake: ScheduleAppointment not implemented")
 	}
 	return q.ScheduleAppointmentFunc(ctx, arg)
+}
+
+func (q *Querier) ReleaseAppointment(ctx context.Context, id int64) (db.Appointment, error) {
+	if q.ReleaseAppointmentFunc == nil {
+		panic("dbfake: ReleaseAppointment not implemented")
+	}
+	return q.ReleaseAppointmentFunc(ctx, id)
 }
 
 func (q *Querier) CreateAppointmentExperimenter(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error) {
@@ -761,4 +779,11 @@ func (q *Querier) ListBusyEquipmentForDateRange(ctx context.Context, arg db.List
 		panic("dbfake: ListBusyEquipmentForDateRange not implemented")
 	}
 	return q.ListBusyEquipmentForDateRangeFunc(ctx, arg)
+}
+
+func (q *Querier) ListEligibleChildrenForExperiment(ctx context.Context, arg db.ListEligibleChildrenForExperimentParams) ([]db.Child, error) {
+	if q.ListEligibleChildrenForExperimentFunc == nil {
+		panic("dbfake: ListEligibleChildrenForExperiment not implemented")
+	}
+	return q.ListEligibleChildrenForExperimentFunc(ctx, arg)
 }

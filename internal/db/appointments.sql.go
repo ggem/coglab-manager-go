@@ -158,6 +158,52 @@ func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentI
 	return items, nil
 }
 
+const listAppointmentsByExperiment = `-- name: ListAppointmentsByExperiment :many
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at from appointments
+where experiment_id = $1
+  and ($2::text is null or status = $2)
+order by created_at
+`
+
+type ListAppointmentsByExperimentParams struct {
+	ExperimentID int64   `json:"experiment_id"`
+	Status       *string `json:"status"`
+}
+
+func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppointmentsByExperimentParams) ([]Appointment, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsByExperiment, arg.ExperimentID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Appointment
+	for rows.Next() {
+		var i Appointment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExperimentID,
+			&i.ChildID,
+			&i.Session,
+			&i.AgeRangeMinMonths,
+			&i.AgeRangeMaxMonths,
+			&i.SiblingComing,
+			&i.ScheduleDate,
+			&i.ScheduleTimeStart,
+			&i.ScheduleTimeEnd,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBusyAppointmentExperimentersForDateRange = `-- name: ListBusyAppointmentExperimentersForDateRange :many
 select appointment_experimenters.user_id, appointments.schedule_date,
        appointments.schedule_time_start, appointments.schedule_time_end
@@ -261,6 +307,38 @@ func (q *Queries) ListBusyEquipmentForDateRange(ctx context.Context, arg ListBus
 		return nil, err
 	}
 	return items, nil
+}
+
+const releaseAppointment = `-- name: ReleaseAppointment :one
+update appointments
+set status = 'released'
+where id = $1 and status in ('to_be_scheduled', 'pending')
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+`
+
+// Deliberately allows releasing a 'pending' (already time-scheduled)
+// appointment, not just an unscheduled one -- matches legacy's per-child
+// release, which does the same. Frees the child up again: 'released'
+// falls outside appointments_one_active_hold_per_child's predicate.
+func (q *Queries) ReleaseAppointment(ctx context.Context, id int64) (Appointment, error) {
+	row := q.db.QueryRow(ctx, releaseAppointment, id)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.ExperimentID,
+		&i.ChildID,
+		&i.Session,
+		&i.AgeRangeMinMonths,
+		&i.AgeRangeMaxMonths,
+		&i.SiblingComing,
+		&i.ScheduleDate,
+		&i.ScheduleTimeStart,
+		&i.ScheduleTimeEnd,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const scheduleAppointment = `-- name: ScheduleAppointment :one

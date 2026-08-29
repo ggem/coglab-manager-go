@@ -202,12 +202,15 @@ func (s *Server) Routes() http.Handler {
 				r.Delete("/{roleID}", s.handleRemoveExperimentTrainingRequirement)
 			})
 			r.Post("/appointments", s.handleCreateAppointment)
+			r.Get("/appointments", s.handleListAppointmentsByExperiment)
+			r.Post("/hold-children", s.handleHoldChildrenForExperiment)
 		})
 
 		r.Route("/appointments/{appointmentID}", func(r chi.Router) {
 			r.Use(s.requireLabMemberForAppointment)
 			r.Get("/availability", s.handleSearchAppointmentAvailability)
 			r.Post("/schedule", s.handleScheduleAppointment)
+			r.Post("/release", s.handleReleaseAppointment)
 		})
 	})
 

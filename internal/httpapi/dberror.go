@@ -43,3 +43,12 @@ func (s *Server) writeDBError(w http.ResponseWriter, err error) {
 	s.logger.Error("database error", "error", err)
 	writeError(w, http.StatusInternalServerError, "internal error")
 }
+
+// isUniqueViolation reports whether err is a Postgres unique-constraint
+// violation, without writing an HTTP response -- unlike writeDBError, some
+// callers (matching's hold loop) treat a unique violation as an expected
+// outcome to skip past, not a request failure.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation
+}

@@ -504,11 +504,23 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 	}
 
 	// A second appointment with sibling_coming = "not_coming" shouldn't
-	// even attempt a sitter, even though one happens to be free.
+	// even attempt a sitter, even though one happens to be free. Uses a
+	// second child, not the first: that child's first appointment is
+	// already 'pending' (a live hold, per M6's
+	// appointments_one_active_hold_per_child), and this scenario isn't
+	// about hold semantics.
+	var secondChild childResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "SecondKid", LastName: "Test", Sex: "unknown", Response: "unknown",
+	}), &secondChild)
 	var noSiblingAppointment appointmentResponse
-	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{
-		ChildID: child.ID, SiblingComing: "not_coming",
-	}), &noSiblingAppointment)
+	noSiblingAppointmentRec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{
+		ChildID: secondChild.ID, SiblingComing: "not_coming",
+	})
+	if noSiblingAppointmentRec.Code != http.StatusCreated {
+		t.Fatalf("create second appointment status = %d, want %d; body = %s", noSiblingAppointmentRec.Code, http.StatusCreated, noSiblingAppointmentRec.Body)
+	}
+	decode(noSiblingAppointmentRec, &noSiblingAppointment)
 
 	var noSiblingCandidates []candidateSlotResponse
 	decode(do(http.MethodGet, fmt.Sprintf("/appointments/%d/availability?start_date=%s&end_date=%s", noSiblingAppointment.ID, dateStr, dateStr), nil), &noSiblingCandidates)
@@ -524,6 +536,203 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchingFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Matching Test Lab", fmt.Sprintf("mtl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("matching-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("matching-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	minAge, maxAge := 6.0, 60.0
+	var experiment experimentResponse
+	experimentRec := do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Matching Integration Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: &minAge, AgeRangeMaxMonths: &maxAge,
+		FilterPremies: true, FilterMinLanguages: 1, FilterLanguages: []string{"english"},
+	})
+	if experimentRec.Code != http.StatusCreated {
+		t.Fatalf("create experiment status = %d, want %d; body = %s", experimentRec.Code, http.StatusCreated, experimentRec.Body)
+	}
+	decode(experimentRec, &experiment)
+
+	// A second, filter-free experiment just to put "alreadyHeld" into a
+	// live appointment against -- proving the hold check is global (any
+	// experiment), not scoped to the one being matched against.
+	var otherExperiment experimentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Other Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: ptrFloat(0), AgeRangeMaxMonths: ptrFloat(200),
+	}), &otherExperiment)
+
+	var family familyResponse
+	decode(do(http.MethodPost, "/families/", familyRequest{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"}), &family)
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	birthDateMonthsAgo := func(months int) *string {
+		s := today.AddDate(0, -months, 0).Format(dateLayout)
+		return &s
+	}
+	newChild := func(name string, req childRequest) childResponse {
+		req.FirstName = name
+		req.LastName = "Test"
+		if req.Sex == "" {
+			req.Sex = "unknown"
+		}
+		if req.Response == "" {
+			req.Response = "unknown"
+		}
+		var c childResponse
+		rec := do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create child %s status = %d, want %d; body = %s", name, rec.Code, http.StatusCreated, rec.Body)
+		}
+		decode(rec, &c)
+		return c
+	}
+
+	eligible := newChild("Eligible", childRequest{
+		BirthDate: birthDateMonthsAgo(24), Languages: []string{"english"},
+	})
+	wrongAge := newChild("WrongAge", childRequest{
+		BirthDate: birthDateMonthsAgo(100), Languages: []string{"english"},
+	})
+	missingLanguage := newChild("MissingLanguage", childRequest{
+		BirthDate: birthDateMonthsAgo(24), Languages: nil,
+	})
+	premie := newChild("Premie", childRequest{
+		BirthDate: birthDateMonthsAgo(24), Languages: []string{"english"}, Premie: ptrBool(true),
+	})
+	alreadyHeld := newChild("AlreadyHeld", childRequest{
+		BirthDate: birthDateMonthsAgo(24), Languages: []string{"english"},
+	})
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", otherExperiment.ID), appointmentRequest{
+		ChildID: alreadyHeld.ID,
+	}); rec.Code != http.StatusCreated {
+		t.Fatalf("hold alreadyHeld against other experiment status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body)
+	}
+
+	windowStart := today.Format(dateLayout)
+	windowEnd := today.AddDate(0, 0, 7).Format(dateLayout)
+
+	var held []appointmentResponse
+	holdRec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/hold-children", experiment.ID), holdChildrenRequest{
+		StartDate: windowStart, EndDate: windowEnd, Count: 10, Sort: "oldest",
+	})
+	if holdRec.Code != http.StatusOK {
+		t.Fatalf("hold-children status = %d, want %d; body = %s", holdRec.Code, http.StatusOK, holdRec.Body)
+	}
+	decode(holdRec, &held)
+
+	if len(held) != 1 || held[0].ChildID != eligible.ID {
+		t.Fatalf("held = %+v, want exactly child %d (Eligible); WrongAge=%d MissingLanguage=%d Premie=%d AlreadyHeld=%d should all be excluded",
+			held, eligible.ID, wrongAge.ID, missingLanguage.ID, premie.ID, alreadyHeld.ID)
+	}
+	heldAppointment := held[0]
+	if heldAppointment.Status != "to_be_scheduled" {
+		t.Errorf("held appointment Status = %q, want %q", heldAppointment.Status, "to_be_scheduled")
+	}
+
+	// A second hold-children call must find nobody new: Eligible is now
+	// held (excluded by the derived hold check) and everyone else was
+	// already ineligible.
+	var heldAgain []appointmentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/hold-children", experiment.ID), holdChildrenRequest{
+		StartDate: windowStart, EndDate: windowEnd, Count: 10, Sort: "oldest",
+	}), &heldAgain)
+	if len(heldAgain) != 0 {
+		t.Fatalf("second hold-children call held = %+v, want none (Eligible is already held)", heldAgain)
+	}
+
+	// Release, then confirm the child becomes eligible again.
+	releaseRec := do(http.MethodPost, fmt.Sprintf("/appointments/%d/release", heldAppointment.ID), nil)
+	if releaseRec.Code != http.StatusOK {
+		t.Fatalf("release status = %d, want %d; body = %s", releaseRec.Code, http.StatusOK, releaseRec.Body)
+	}
+	var released appointmentResponse
+	decode(releaseRec, &released)
+	if released.Status != "released" {
+		t.Errorf("released Status = %q, want %q", released.Status, "released")
+	}
+
+	var heldAfterRelease []appointmentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/hold-children", experiment.ID), holdChildrenRequest{
+		StartDate: windowStart, EndDate: windowEnd, Count: 10, Sort: "oldest",
+	}), &heldAfterRelease)
+	if len(heldAfterRelease) != 1 || heldAfterRelease[0].ChildID != eligible.ID {
+		t.Fatalf("hold-children after release = %+v, want exactly child %d (Eligible) again", heldAfterRelease, eligible.ID)
+	}
+
+	// The experiment now has two appointments for Eligible (one released,
+	// one freshly held) -- list, and filter by status.
+	var allAppointments []appointmentResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), nil), &allAppointments)
+	if len(allAppointments) != 2 {
+		t.Fatalf("all appointments = %+v, want 2", allAppointments)
+	}
+	var releasedOnly []appointmentResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/experiments/%d/appointments?status=released", experiment.ID), nil), &releasedOnly)
+	if len(releasedOnly) != 1 || releasedOnly[0].ID != heldAppointment.ID {
+		t.Fatalf("released-only appointments = %+v, want exactly the first held appointment (%d)", releasedOnly, heldAppointment.ID)
+	}
+}
+
+func ptrFloat(f float64) *float64 { return &f }
+func ptrBool(b bool) *bool        { return &b }
 
 func auditEventsForUser(ctx context.Context, userID int64) ([]string, error) {
 	rows, err := testPool.Query(ctx, "select action from audit_events where actor_user_id = $1 order by id", userID)
