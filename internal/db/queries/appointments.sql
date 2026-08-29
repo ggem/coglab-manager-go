@@ -9,6 +9,12 @@ returning *;
 -- name: GetAppointmentByID :one
 select * from appointments where id = sqlc.arg(id);
 
+-- name: ListAppointmentsByExperiment :many
+select * from appointments
+where experiment_id = sqlc.arg(experiment_id)
+  and (sqlc.narg(status)::text is null or status = sqlc.narg(status))
+order by created_at;
+
 -- name: GetAppointmentLabID :one
 -- For lab-membership authorization (mirrors GetConditionValueLabID):
 -- appointments has no lab_id of its own, so resolve it via the experiment.
@@ -27,6 +33,16 @@ set schedule_date = sqlc.arg(schedule_date),
     schedule_time_end = sqlc.arg(schedule_time_end),
     status = 'pending'
 where id = sqlc.arg(id)
+returning *;
+
+-- name: ReleaseAppointment :one
+-- Deliberately allows releasing a 'pending' (already time-scheduled)
+-- appointment, not just an unscheduled one -- matches legacy's per-child
+-- release, which does the same. Frees the child up again: 'released'
+-- falls outside appointments_one_active_hold_per_child's predicate.
+update appointments
+set status = 'released'
+where id = sqlc.arg(id) and status in ('to_be_scheduled', 'pending')
 returning *;
 
 -- name: CreateAppointmentExperimenter :one

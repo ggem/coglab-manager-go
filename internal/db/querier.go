@@ -69,6 +69,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error)
+	ListAppointmentsByExperiment(ctx context.Context, arg ListAppointmentsByExperimentParams) ([]Appointment, error)
 	// Members already committed to a Pending appointment within this date
 	// range in this lab, with the date and time range they're busy -- one
 	// query for a whole multi-day search rather than one call per candidate
@@ -81,6 +82,25 @@ type Querier interface {
 	ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error)
 	ListConditionValuesByCondition(ctx context.Context, conditionID int64) ([]ConditionValue, error)
 	ListConditionsByLab(ctx context.Context, labID int64) ([]Condition, error)
+	// Every currently-active, not-already-held child eligible for a given
+	// experiment within a scheduling window [window_start, window_end]:
+	// their birth date must place their age inside the experiment's age
+	// range at *some* point in the window, not necessarily today. Mirrors
+	// legacy's hold-children formula: min_birth_date = window_start -
+	// max_age, max_birth_date = window_end - min_age -- the widest birth-date
+	// range for which some date in the window puts the child's age inside
+	// [min_age, max_age]. Age-range and filter columns come straight from
+	// the joined experiments row rather than being computed in Go first.
+	//
+	// "Held" is derived, not a stored flag: not exists a live
+	// (to_be_scheduled/pending) appointment for this child, for *any*
+	// experiment -- enforced elsewhere by appointments_one_active_hold_per_
+	// child, a partial unique index, not re-derived here as anything more
+	// than a filter.
+	//
+	// No ORDER BY/LIMIT: sort mode (oldest-first vs. random) and the
+	// requested count are applied by the caller in Go.
+	ListEligibleChildrenForExperiment(ctx context.Context, arg ListEligibleChildrenForExperimentParams) ([]Child, error)
 	ListEquipmentByLab(ctx context.Context, labID int64) ([]Equipment, error)
 	ListExperimentConditions(ctx context.Context, experimentID int64) ([]Condition, error)
 	ListExperimentEquipment(ctx context.Context, experimentID int64) ([]Equipment, error)
@@ -110,6 +130,11 @@ type Querier interface {
 	// One query for a whole multi-day search range, rather than one call per
 	// candidate day -- the caller groups rows by date in Go.
 	ListScheduleBlockingsForDateRange(ctx context.Context, arg ListScheduleBlockingsForDateRangeParams) ([]ScheduleBlocking, error)
+	// Deliberately allows releasing a 'pending' (already time-scheduled)
+	// appointment, not just an unscheduled one -- matches legacy's per-child
+	// release, which does the same. Frees the child up again: 'released'
+	// falls outside appointments_one_active_hold_per_child's predicate.
+	ReleaseAppointment(ctx context.Context, id int64) (Appointment, error)
 	RemoveExperimentCondition(ctx context.Context, arg RemoveExperimentConditionParams) error
 	RemoveExperimentEquipment(ctx context.Context, arg RemoveExperimentEquipmentParams) error
 	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error

@@ -12,6 +12,7 @@ import (
 const (
 	ActionAppointmentCreated   = "appointment.created"
 	ActionAppointmentScheduled = "appointment.scheduled"
+	ActionAppointmentReleased  = "appointment.released"
 )
 
 // maxSearchDays caps how many days an availability search covers in one
@@ -114,6 +115,55 @@ func (s *Server) handleCreateAppointment(w http.ResponseWriter, r *http.Request)
 	})
 
 	writeJSON(w, http.StatusCreated, appointmentToResponse(appointment))
+}
+
+func (s *Server) handleListAppointmentsByExperiment(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+
+	appointments, err := s.queries.ListAppointmentsByExperiment(r.Context(), db.ListAppointmentsByExperimentParams{
+		ExperimentID: experimentID,
+		Status:       queryString(r, "status"),
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]appointmentResponse, len(appointments))
+	for i, a := range appointments {
+		resp[i] = appointmentToResponse(a)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleReleaseAppointment frees a held child back up: clears the hold by
+// moving the appointment to 'released', which falls outside
+// appointments_one_active_hold_per_child's predicate. Works on a
+// 'pending' (already time-scheduled) appointment too, not just an
+// unscheduled one -- matches legacy's per-child release.
+func (s *Server) handleReleaseAppointment(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+
+	released, err := s.queries.ReleaseAppointment(r.Context(), appointmentID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionAppointmentReleased,
+		EntityType:  ptr("appointment"),
+		EntityID:    &appointmentID,
+	})
+
+	writeJSON(w, http.StatusOK, appointmentToResponse(released))
 }
 
 type candidateSlotResponse struct {
