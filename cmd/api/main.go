@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/smtp"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,6 +20,8 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/httpapi"
+	"github.com/ggem/coglab-manager-go/internal/mail"
+	"github.com/ggem/coglab-manager-go/internal/reminders"
 )
 
 func main() {
@@ -62,6 +67,21 @@ func run() error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	mailer, err := newMailer()
+	if err != nil {
+		return err
+	}
+	leadTime, err := familyReminderLeadTime()
+	if err != nil {
+		return err
+	}
+	hour, err := digestHour()
+	if err != nil {
+		return err
+	}
+	scheduler := reminders.NewScheduler(queries, mailer, logger, leadTime, hour)
+	scheduler.Run(ctx)
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("listening", "addr", srv.Addr)
@@ -80,7 +100,66 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	shutdownErr := srv.Shutdown(shutdownCtx)
+	scheduler.Wait()
+	return shutdownErr
+}
+
+// newMailer builds the SMTP sender the scheduled jobs send through, from
+// SMTP_ADDR ("host:port") and SMTP_FROM, both required the same way
+// DATABASE_URL is -- this is core functionality being wired at startup,
+// not an optional add-on that should silently degrade. SMTP_USERNAME/
+// SMTP_PASSWORD are optional: a relay that needs no authentication (e.g.
+// a local relay on the same host, matching legacy's own setup) can leave
+// both unset.
+func newMailer() (mail.Sender, error) {
+	smtpAddr := os.Getenv("SMTP_ADDR")
+	if smtpAddr == "" {
+		return nil, fmt.Errorf("SMTP_ADDR environment variable is required")
+	}
+	smtpFrom := os.Getenv("SMTP_FROM")
+	if smtpFrom == "" {
+		return nil, fmt.Errorf("SMTP_FROM environment variable is required")
+	}
+
+	var smtpAuth smtp.Auth
+	if username := os.Getenv("SMTP_USERNAME"); username != "" {
+		host, _, err := net.SplitHostPort(smtpAddr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SMTP_ADDR: %w", err)
+		}
+		smtpAuth = smtp.PlainAuth("", username, os.Getenv("SMTP_PASSWORD"), host)
+	}
+
+	return mail.NewSMTPSender(smtpAddr, smtpFrom, smtpAuth), nil
+}
+
+// familyReminderLeadTime parses FAMILY_REMINDER_LEAD_TIME (a
+// time.ParseDuration string, e.g. "24h"), defaulting to 24h.
+func familyReminderLeadTime() (time.Duration, error) {
+	v := os.Getenv("FAMILY_REMINDER_LEAD_TIME")
+	if v == "" {
+		return 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid FAMILY_REMINDER_LEAD_TIME: %w", err)
+	}
+	return d, nil
+}
+
+// digestHour is the local hour (0-23) the staff digest fires at daily,
+// from DIGEST_HOUR, defaulting to 17 (5pm).
+func digestHour() (int, error) {
+	v := os.Getenv("DIGEST_HOUR")
+	if v == "" {
+		return 17, nil
+	}
+	hour, err := strconv.Atoi(v)
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, fmt.Errorf("invalid DIGEST_HOUR %q: must be an integer 0-23", v)
+	}
+	return hour, nil
 }
 
 func addr() string {

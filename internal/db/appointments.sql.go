@@ -15,7 +15,7 @@ const arriveAppointment = `-- name: ArriveAppointment :one
 update appointments
 set status = 'arrived'
 where id = $1 and status = 'pending'
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
 `
 
 // Only a scheduled ('pending') appointment can arrive -- an unscheduled
@@ -39,6 +39,7 @@ func (q *Queries) ArriveAppointment(ctx context.Context, id int64) (Appointment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReminderSentAt,
 	)
 	return i, err
 }
@@ -49,7 +50,7 @@ values (
     $1, $2, $3,
     $4, $5, $6
 )
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
 `
 
 type CreateAppointmentParams struct {
@@ -85,6 +86,7 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReminderSentAt,
 	)
 	return i, err
 }
@@ -121,7 +123,7 @@ func (q *Queries) CreateAppointmentExperimenter(ctx context.Context, arg CreateA
 }
 
 const getAppointmentByID = `-- name: GetAppointmentByID :one
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at from appointments where id = $1
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at from appointments where id = $1
 `
 
 func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment, error) {
@@ -141,6 +143,7 @@ func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReminderSentAt,
 	)
 	return i, err
 }
@@ -191,7 +194,7 @@ func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentI
 }
 
 const listAppointmentsByExperiment = `-- name: ListAppointmentsByExperiment :many
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at from appointments
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at from appointments
 where experiment_id = $1
   and ($2::text is null or status = $2)
 order by created_at
@@ -225,6 +228,7 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReminderSentAt,
 		); err != nil {
 			return nil, err
 		}
@@ -345,7 +349,7 @@ const releaseAppointment = `-- name: ReleaseAppointment :one
 update appointments
 set status = 'released'
 where id = $1 and status in ('to_be_scheduled', 'pending')
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
 `
 
 // Deliberately allows releasing a 'pending' (already time-scheduled)
@@ -369,6 +373,7 @@ func (q *Queries) ReleaseAppointment(ctx context.Context, id int64) (Appointment
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReminderSentAt,
 	)
 	return i, err
 }
@@ -380,7 +385,7 @@ set schedule_date = $1,
     schedule_time_end = $3,
     status = 'pending'
 where id = $4
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
 `
 
 type ScheduleAppointmentParams struct {
@@ -416,6 +421,7 @@ func (q *Queries) ScheduleAppointment(ctx context.Context, arg ScheduleAppointme
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReminderSentAt,
 	)
 	return i, err
 }

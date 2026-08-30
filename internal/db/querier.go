@@ -6,6 +6,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -79,6 +81,7 @@ type Querier interface {
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGrantByID(ctx context.Context, id int64) (Grant, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
+	GetJobLastRun(ctx context.Context, jobName string) (pgtype.Timestamptz, error)
 	GetLabAvailabilityGeneralByID(ctx context.Context, id int64) (LabAvailabilityGeneral, error)
 	GetLabAvailabilitySpecificByID(ctx context.Context, id int64) (LabAvailabilitySpecific, error)
 	GetLabMembership(ctx context.Context, arg GetLabMembershipParams) (LabMembership, error)
@@ -99,6 +102,12 @@ type Querier interface {
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error)
 	ListAppointmentsByExperiment(ctx context.Context, arg ListAppointmentsByExperimentParams) ([]Appointment, error)
+	// Pending, not-yet-reminded appointments starting at or before the given
+	// cutoff (now + lead time), with the family's representative (lowest-id)
+	// guardian -- same idiom ListEligibleFamiliesForNewsletter uses. A
+	// family with no guardians at all (guardian_email null) is left for the
+	// caller to skip and log, not silently dropped here.
+	ListAppointmentsDueForReminder(ctx context.Context, dueBefore pgtype.Timestamp) ([]ListAppointmentsDueForReminderRow, error)
 	// Members already committed to a Pending appointment within this date
 	// range in this lab, with the date and time range they're busy -- one
 	// query for a whole multi-day search rather than one call per candidate
@@ -108,6 +117,13 @@ type Querier interface {
 	// range in this lab, with the date and time range it's in use -- counted
 	// against each equipment's quantity for that day's availability grid.
 	ListBusyEquipmentForDateRange(ctx context.Context, arg ListBusyEquipmentForDateRangeParams) ([]ListBusyEquipmentForDateRangeRow, error)
+	// Distinct appointment IDs with a relevant audit event since the digest's
+	// last run -- replaces legacy's change_status dirty-flag column with a
+	// query over the audit log this project already maintains as a hard
+	// requirement. entity_id is forced non-null via coalesce (safe: the
+	// where clause already excludes null entity_id) so the Go side gets a
+	// plain int64, not a pointer.
+	ListChangedAppointmentIDsSince(ctx context.Context, arg ListChangedAppointmentIDsSinceParams) ([]int64, error)
 	ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error)
 	ListConditionValuesByCondition(ctx context.Context, conditionID int64) ([]ConditionValue, error)
 	ListConditionsByLab(ctx context.Context, labID int64) ([]Condition, error)
@@ -166,12 +182,25 @@ type Querier interface {
 	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
 	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
+	// One recipient's current upcoming Pending schedule in one lab -- the
+	// digest email body. Filters to appointments the given user is assigned
+	// to (via exists), but aggregates role names across every experimenter
+	// on the appointment, not just the recipient's own role, matching
+	// legacy's "(roles)" showing the whole assigned team for context.
+	ListPendingAppointmentsForUserInLab(ctx context.Context, arg ListPendingAppointmentsForUserInLabParams) ([]ListPendingAppointmentsForUserInLabRow, error)
 	ListProtocolsByLab(ctx context.Context, labID int64) ([]Protocol, error)
+	// Distinct (staff member, lab) pairs assigned to any of the given
+	// appointments -- the digest's recipients. Recipients come from
+	// appointment_experimenters (who's actually assigned), not from the
+	// audit event's actor (who might be an admin scheduling on someone
+	// else's behalf).
+	ListRecipientsForAppointments(ctx context.Context, appointmentIds []int64) ([]ListRecipientsForAppointmentsRow, error)
 	ListScheduleBlockingsByLab(ctx context.Context, labID int64) ([]ScheduleBlocking, error)
 	// One query for a whole multi-day search range, rather than one call per
 	// candidate day -- the caller groups rows by date in Go.
 	ListScheduleBlockingsForDateRange(ctx context.Context, arg ListScheduleBlockingsForDateRangeParams) ([]ScheduleBlocking, error)
 	ListZipCodesByLab(ctx context.Context, labID int64) ([]Zipcode, error)
+	MarkAppointmentReminderSent(ctx context.Context, id int64) error
 	MarkNewsletterSent(ctx context.Context, arg MarkNewsletterSentParams) error
 	// Per-race_ethnicity-category enrollment counts, cross-tabbed by sex, over
 	// 'arrived' appointments in a date range -- the current-shape NIH PHS
@@ -247,6 +276,14 @@ type Querier interface {
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
 	UpdateProtocol(ctx context.Context, arg UpdateProtocolParams) (Protocol, error)
 	UpdateZipCode(ctx context.Context, arg UpdateZipCodeParams) (Zipcode, error)
+	// last_run_at is always Postgres's own now(), not a caller-supplied
+	// timestamp: it gets compared against audit_events.occurred_at (also
+	// stamped by Postgres's now()) in ListChangedAppointmentIDsSince, and
+	// comparing a value from the calling process's clock against one from
+	// Postgres's clock is vulnerable to real (if small) clock skew between
+	// the two -- caught by TestStaffDigestFlow_Integration flaking on
+	// exactly this before this query was written this way.
+	UpsertJobLastRun(ctx context.Context, jobName string) error
 	// Child counts by mailing zip code, optionally filtered by recruitment
 	// source, annotated with the lab's recruiting-priority tier for that zip
 	// when one is configured. Child counts are computed globally (children
