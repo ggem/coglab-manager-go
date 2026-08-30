@@ -24,6 +24,7 @@ type Appointment struct {
 	Status            string             `json:"status"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
 }
 
 type AppointmentExperimenter struct {
@@ -289,6 +290,11 @@ type ScheduleBlocking struct {
 	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ScheduledJobRun struct {
+	JobName   string             `json:"job_name"`
+	LastRunAt pgtype.Timestamptz `json:"last_run_at"`
 }
 
 type Session struct {

@@ -16,15 +16,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/dbtest"
+	"github.com/ggem/coglab-manager-go/internal/mail/mailfake"
+	"github.com/ggem/coglab-manager-go/internal/reminders"
 )
 
 var (
@@ -1080,6 +1084,228 @@ func TestNewsletterExportFlow_Integration(t *testing.T) {
 	if len(rowsNoFilter) != 1 {
 		t.Fatalf("unfiltered export after mark-sent = %+v, want still 1 row (no newsletter_id filter applied)", rowsNoFilter)
 	}
+}
+
+// TestStaffDigestFlow_Integration exercises internal/reminders.
+// RunStaffDigest against real Postgres. It builds appointment/staff
+// state directly through db.Queries (the same handle RunStaffDigest
+// itself takes) rather than through the HTTP layer or a full M5
+// search+schedule flow -- that flow already has its own integration
+// coverage (TestSchedulingFlow_Integration); this test's job is proving
+// the digest's own audit_events-driven query logic against a real
+// database, so it fabricates a scheduled appointment and its
+// appointment.scheduled audit event directly.
+func TestStaffDigestFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	// Prime the digest's cursor first: a job with no stored cursor yet
+	// deliberately initializes one and skips notifying on that pass
+	// (see RunStaffDigest's doc comment) rather than catching up on
+	// every historical change -- so this test's own scheduling change
+	// below needs the cursor to already exist, the same way it would on
+	// any run after the very first one in a real deployment.
+	if err := reminders.RunStaffDigest(ctx, testQueries, &mailfake.Sender{}, discardLogger(), time.Now().UTC()); err != nil {
+		t.Fatalf("RunStaffDigest (priming call): %v", err)
+	}
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Digest Test Lab", fmt.Sprintf("dtl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	experimenter, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email: fmt.Sprintf("digest-staff-%d@example.edu", time.Now().UnixNano()), FirstName: "Staff", LastName: "Member",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(experimenter): %v", err)
+	}
+
+	role, err := testQueries.CreateExperimentRole(ctx, db.CreateExperimentRoleParams{LabID: labID, Name: "Experimenter"})
+	if err != nil {
+		t.Fatalf("CreateExperimentRole: %v", err)
+	}
+
+	minAge, maxAge := numericFor(t, 0), numericFor(t, 240)
+	experiment, err := testQueries.CreateExperiment(ctx, db.CreateExperimentParams{
+		LabID: labID, Name: "Digest Integration Study", Status: "not_run", Sessions: 1,
+		AgeRangeMinMonths: minAge, AgeRangeMaxMonths: maxAge, DurationMinutes: 30,
+		FilterLanguages: []string{},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperiment: %v", err)
+	}
+
+	family, err := testQueries.CreateFamily(ctx, db.CreateFamilyParams{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"})
+	if err != nil {
+		t.Fatalf("CreateFamily: %v", err)
+	}
+	child, err := testQueries.CreateChild(ctx, db.CreateChildParams{
+		FamilyID: family.ID, FirstName: "Kid", LastName: "Test", Sex: "unknown",
+		RaceEthnicity: []string{}, Languages: []string{}, Response: "unknown", CreatedByUserID: experimenter.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateChild: %v", err)
+	}
+
+	appointment, err := testQueries.CreateAppointment(ctx, db.CreateAppointmentParams{
+		ExperimentID: experiment.ID, ChildID: child.ID, Session: 1, SiblingComing: "unknown",
+	})
+	if err != nil {
+		t.Fatalf("CreateAppointment: %v", err)
+	}
+
+	tomorrow := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)
+	scheduled, err := testQueries.ScheduleAppointment(ctx, db.ScheduleAppointmentParams{
+		ID: appointment.ID, ScheduleDate: pgtype.Date{Time: tomorrow, Valid: true},
+		ScheduleTimeStart: pgtype.Time{Microseconds: int64(9 * time.Hour / time.Microsecond), Valid: true},
+		ScheduleTimeEnd:   pgtype.Time{Microseconds: int64(9*time.Hour/time.Microsecond) + int64(30*time.Minute/time.Microsecond), Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ScheduleAppointment: %v", err)
+	}
+	if _, err := testQueries.CreateAppointmentExperimenter(ctx, db.CreateAppointmentExperimenterParams{
+		AppointmentID: scheduled.ID, UserID: experimenter.ID, ExperimentRoleID: role.ID,
+	}); err != nil {
+		t.Fatalf("CreateAppointmentExperimenter: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		"insert into audit_events (actor_user_id, lab_id, action, entity_type, entity_id) values ($1, $2, 'appointment.scheduled', 'appointment', $3)",
+		experimenter.ID, labID, scheduled.ID); err != nil {
+		t.Fatalf("insert audit event: %v", err)
+	}
+
+	sender := &mailfake.Sender{}
+	now := time.Now().UTC()
+	if err := reminders.RunStaffDigest(ctx, testQueries, sender, discardLogger(), now); err != nil {
+		t.Fatalf("RunStaffDigest: %v", err)
+	}
+
+	got := sender.Messages()
+	if len(got) != 1 {
+		t.Fatalf("Messages = %+v, want exactly one", got)
+	}
+	if got[0].To != experimenter.Email {
+		t.Errorf("To = %q, want %q", got[0].To, experimenter.Email)
+	}
+	if !strings.Contains(got[0].Body, "Kid") || !strings.Contains(got[0].Body, "Digest Integration Study") {
+		t.Errorf("Body = %q, want it to mention the child and experiment", got[0].Body)
+	}
+
+	// A second run with a later now, nothing new scheduled, must not
+	// re-send: the cursor advanced past this appointment's audit event.
+	if err := reminders.RunStaffDigest(ctx, testQueries, sender, discardLogger(), now.Add(time.Minute)); err != nil {
+		t.Fatalf("RunStaffDigest (second run): %v", err)
+	}
+	if len(sender.Messages()) != 1 {
+		t.Fatalf("Messages after second run = %+v, want still exactly one (no duplicate)", sender.Messages())
+	}
+}
+
+// TestFamilyReminderFlow_Integration exercises internal/reminders.
+// RunFamilyReminders against real Postgres, for the same reason
+// TestStaffDigestFlow_Integration builds its appointment state directly
+// through db.Queries rather than a full HTTP/scheduling flow.
+func TestFamilyReminderFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	family, err := testQueries.CreateFamily(ctx, db.CreateFamilyParams{Address: "42 Elm St", City: "Boulder", State: "CO", Zip: "80302"})
+	if err != nil {
+		t.Fatalf("CreateFamily: %v", err)
+	}
+	guardianEmail := fmt.Sprintf("guardian-%d@example.edu", time.Now().UnixNano())
+	if _, err := testQueries.CreateGuardian(ctx, db.CreateGuardianParams{
+		FamilyID: family.ID, FirstName: "Parent", LastName: "One", Education: "unknown", Email: guardianEmail,
+	}); err != nil {
+		t.Fatalf("CreateGuardian: %v", err)
+	}
+
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email: fmt.Sprintf("reminder-actor-%d@example.edu", time.Now().UnixNano()), FirstName: "Actor", LastName: "Test",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+	child, err := testQueries.CreateChild(ctx, db.CreateChildParams{
+		FamilyID: family.ID, FirstName: "Kid", LastName: "Test", Sex: "unknown",
+		RaceEthnicity: []string{}, Languages: []string{}, Response: "unknown", CreatedByUserID: actor.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateChild: %v", err)
+	}
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Reminder Test Lab", fmt.Sprintf("rtl2-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+	minAge, maxAge := numericFor(t, 0), numericFor(t, 240)
+	experiment, err := testQueries.CreateExperiment(ctx, db.CreateExperimentParams{
+		LabID: labID, Name: "Reminder Integration Study", Status: "not_run", Sessions: 1,
+		AgeRangeMinMonths: minAge, AgeRangeMaxMonths: maxAge, DurationMinutes: 30,
+		FilterLanguages: []string{},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperiment: %v", err)
+	}
+
+	appointment, err := testQueries.CreateAppointment(ctx, db.CreateAppointmentParams{
+		ExperimentID: experiment.ID, ChildID: child.ID, Session: 1, SiblingComing: "unknown",
+	})
+	if err != nil {
+		t.Fatalf("CreateAppointment: %v", err)
+	}
+	now := time.Now().UTC()
+	// 12 hours out: inside a 24h reminder lead time.
+	soon := now.Add(12 * time.Hour)
+	if _, err := testQueries.ScheduleAppointment(ctx, db.ScheduleAppointmentParams{
+		ID: appointment.ID, ScheduleDate: pgtype.Date{Time: time.Date(soon.Year(), soon.Month(), soon.Day(), 0, 0, 0, 0, time.UTC), Valid: true},
+		ScheduleTimeStart: pgtype.Time{Microseconds: int64(soon.Hour())*int64(time.Hour/time.Microsecond) + int64(soon.Minute())*int64(time.Minute/time.Microsecond), Valid: true},
+		ScheduleTimeEnd:   pgtype.Time{Microseconds: int64(soon.Hour())*int64(time.Hour/time.Microsecond) + int64(soon.Minute())*int64(time.Minute/time.Microsecond) + int64(30*time.Minute/time.Microsecond), Valid: true},
+	}); err != nil {
+		t.Fatalf("ScheduleAppointment: %v", err)
+	}
+
+	sender := &mailfake.Sender{}
+	if err := reminders.RunFamilyReminders(ctx, testQueries, sender, discardLogger(), now, 24*time.Hour); err != nil {
+		t.Fatalf("RunFamilyReminders: %v", err)
+	}
+
+	got := sender.Messages()
+	if len(got) != 1 {
+		t.Fatalf("Messages = %+v, want exactly one", got)
+	}
+	if got[0].To != guardianEmail {
+		t.Errorf("To = %q, want %q", got[0].To, guardianEmail)
+	}
+	if !strings.Contains(got[0].Body, "Kid") || !strings.Contains(got[0].Body, "Reminder Integration Study") {
+		t.Errorf("Body = %q, want it to mention the child and experiment", got[0].Body)
+	}
+
+	var reminderSentAt pgtype.Timestamptz
+	if err := testPool.QueryRow(ctx, "select reminder_sent_at from appointments where id = $1", appointment.ID).Scan(&reminderSentAt); err != nil {
+		t.Fatalf("query reminder_sent_at: %v", err)
+	}
+	if !reminderSentAt.Valid {
+		t.Error("reminder_sent_at was not stamped")
+	}
+
+	// A second run must not re-send: reminder_sent_at excludes it now.
+	if err := reminders.RunFamilyReminders(ctx, testQueries, sender, discardLogger(), now, 24*time.Hour); err != nil {
+		t.Fatalf("RunFamilyReminders (second run): %v", err)
+	}
+	if len(sender.Messages()) != 1 {
+		t.Fatalf("Messages after second run = %+v, want still exactly one (no duplicate)", sender.Messages())
+	}
+}
+
+func numericFor(t *testing.T, f float64) pgtype.Numeric {
+	t.Helper()
+	n, err := ptrToNumeric(&f)
+	if err != nil {
+		t.Fatalf("ptrToNumeric(%v): %v", f, err)
+	}
+	return n
 }
 
 func auditEventsForUser(ctx context.Context, userID int64) ([]string, error) {

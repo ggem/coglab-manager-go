@@ -6,6 +6,8 @@ package dbfake
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/ggem/coglab-manager-go/internal/db"
 )
 
@@ -99,6 +101,14 @@ type Querier struct {
 	HRCReportTotalFunc      func(ctx context.Context, arg db.HRCReportTotalParams) (int64, error)
 	DemographicsReportFunc  func(ctx context.Context, arg db.DemographicsReportParams) ([]db.DemographicsReportRow, error)
 	ZipCodesReportFunc      func(ctx context.Context, arg db.ZipCodesReportParams) ([]db.ZipCodesReportRow, error)
+
+	GetJobLastRunFunc                       func(ctx context.Context, jobName string) (pgtype.Timestamptz, error)
+	UpsertJobLastRunFunc                    func(ctx context.Context, jobName string) error
+	ListChangedAppointmentIDsSinceFunc      func(ctx context.Context, arg db.ListChangedAppointmentIDsSinceParams) ([]int64, error)
+	ListRecipientsForAppointmentsFunc       func(ctx context.Context, appointmentIDs []int64) ([]db.ListRecipientsForAppointmentsRow, error)
+	ListPendingAppointmentsForUserInLabFunc func(ctx context.Context, arg db.ListPendingAppointmentsForUserInLabParams) ([]db.ListPendingAppointmentsForUserInLabRow, error)
+	ListAppointmentsDueForReminderFunc      func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error)
+	MarkAppointmentReminderSentFunc         func(ctx context.Context, id int64) error
 
 	CreateConditionFunc                func(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error)
 	GetConditionByIDFunc               func(ctx context.Context, id int64) (db.Condition, error)
@@ -1040,4 +1050,53 @@ func (q *Querier) ListEligibleChildrenForExperiment(ctx context.Context, arg db.
 		panic("dbfake: ListEligibleChildrenForExperiment not implemented")
 	}
 	return q.ListEligibleChildrenForExperimentFunc(ctx, arg)
+}
+
+func (q *Querier) GetJobLastRun(ctx context.Context, jobName string) (pgtype.Timestamptz, error) {
+	if q.GetJobLastRunFunc == nil {
+		panic("dbfake: GetJobLastRun not implemented")
+	}
+	return q.GetJobLastRunFunc(ctx, jobName)
+}
+
+func (q *Querier) UpsertJobLastRun(ctx context.Context, jobName string) error {
+	if q.UpsertJobLastRunFunc == nil {
+		panic("dbfake: UpsertJobLastRun not implemented")
+	}
+	return q.UpsertJobLastRunFunc(ctx, jobName)
+}
+
+func (q *Querier) ListChangedAppointmentIDsSince(ctx context.Context, arg db.ListChangedAppointmentIDsSinceParams) ([]int64, error) {
+	if q.ListChangedAppointmentIDsSinceFunc == nil {
+		panic("dbfake: ListChangedAppointmentIDsSince not implemented")
+	}
+	return q.ListChangedAppointmentIDsSinceFunc(ctx, arg)
+}
+
+func (q *Querier) ListRecipientsForAppointments(ctx context.Context, appointmentIDs []int64) ([]db.ListRecipientsForAppointmentsRow, error) {
+	if q.ListRecipientsForAppointmentsFunc == nil {
+		panic("dbfake: ListRecipientsForAppointments not implemented")
+	}
+	return q.ListRecipientsForAppointmentsFunc(ctx, appointmentIDs)
+}
+
+func (q *Querier) ListPendingAppointmentsForUserInLab(ctx context.Context, arg db.ListPendingAppointmentsForUserInLabParams) ([]db.ListPendingAppointmentsForUserInLabRow, error) {
+	if q.ListPendingAppointmentsForUserInLabFunc == nil {
+		panic("dbfake: ListPendingAppointmentsForUserInLab not implemented")
+	}
+	return q.ListPendingAppointmentsForUserInLabFunc(ctx, arg)
+}
+
+func (q *Querier) ListAppointmentsDueForReminder(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+	if q.ListAppointmentsDueForReminderFunc == nil {
+		panic("dbfake: ListAppointmentsDueForReminder not implemented")
+	}
+	return q.ListAppointmentsDueForReminderFunc(ctx, dueBefore)
+}
+
+func (q *Querier) MarkAppointmentReminderSent(ctx context.Context, id int64) error {
+	if q.MarkAppointmentReminderSentFunc == nil {
+		panic("dbfake: MarkAppointmentReminderSent not implemented")
+	}
+	return q.MarkAppointmentReminderSentFunc(ctx, id)
 }
