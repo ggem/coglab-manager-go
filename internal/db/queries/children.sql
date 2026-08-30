@@ -52,7 +52,9 @@ update children set
     languages = sqlc.arg(languages),
     recruitment_source_id = sqlc.narg(recruitment_source_id),
     recruitment_source_other = sqlc.arg(recruitment_source_other),
-    response = sqlc.arg(response)
+    response = sqlc.arg(response),
+    mcdi_percentile = sqlc.narg(mcdi_percentile),
+    mcdi_date = sqlc.narg(mcdi_date)
 where id = sqlc.arg(id)
 returning *;
 

@@ -72,6 +72,8 @@ type Child struct {
 	InactiveReason         string             `json:"inactive_reason"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	McdiPercentile         pgtype.Numeric     `json:"mcdi_percentile"`
+	McdiDate               pgtype.Date        `json:"mcdi_date"`
 }
 
 type Condition struct {

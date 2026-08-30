@@ -39,7 +39,7 @@ insert into children (
     $18,
     $19
 )
-returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at
+returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
 `
 
 type CreateChildParams struct {
@@ -112,6 +112,8 @@ func (q *Queries) CreateChild(ctx context.Context, arg CreateChildParams) (Child
 		&i.InactiveReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.McdiPercentile,
+		&i.McdiDate,
 	)
 	return i, err
 }
@@ -134,7 +136,7 @@ func (q *Queries) DeactivateChild(ctx context.Context, arg DeactivateChildParams
 }
 
 const getChildByID = `-- name: GetChildByID :one
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at from children where id = $1
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date from children where id = $1
 `
 
 func (q *Queries) GetChildByID(ctx context.Context, id int64) (Child, error) {
@@ -165,12 +167,14 @@ func (q *Queries) GetChildByID(ctx context.Context, id int64) (Child, error) {
 		&i.InactiveReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.McdiPercentile,
+		&i.McdiDate,
 	)
 	return i, err
 }
 
 const listChildrenByFamily = `-- name: ListChildrenByFamily :many
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at from children where family_id = $1 order by id
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date from children where family_id = $1 order by id
 `
 
 func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error) {
@@ -207,6 +211,8 @@ func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]C
 			&i.InactiveReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.McdiPercentile,
+			&i.McdiDate,
 		); err != nil {
 			return nil, err
 		}
@@ -219,7 +225,7 @@ func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]C
 }
 
 const searchChildren = `-- name: SearchChildren :many
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
 from children
 where
     ($1::text is null
@@ -313,6 +319,8 @@ func (q *Queries) SearchChildren(ctx context.Context, arg SearchChildrenParams) 
 			&i.InactiveReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.McdiPercentile,
+			&i.McdiDate,
 		); err != nil {
 			return nil, err
 		}
@@ -342,9 +350,11 @@ update children set
     languages = $14,
     recruitment_source_id = $15,
     recruitment_source_other = $16,
-    response = $17
-where id = $18
-returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at
+    response = $17,
+    mcdi_percentile = $18,
+    mcdi_date = $19
+where id = $20
+returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
 `
 
 type UpdateChildParams struct {
@@ -365,6 +375,8 @@ type UpdateChildParams struct {
 	RecruitmentSourceID    *int64         `json:"recruitment_source_id"`
 	RecruitmentSourceOther string         `json:"recruitment_source_other"`
 	Response               string         `json:"response"`
+	McdiPercentile         pgtype.Numeric `json:"mcdi_percentile"`
+	McdiDate               pgtype.Date    `json:"mcdi_date"`
 	ID                     int64          `json:"id"`
 }
 
@@ -387,6 +399,8 @@ func (q *Queries) UpdateChild(ctx context.Context, arg UpdateChildParams) (Child
 		arg.RecruitmentSourceID,
 		arg.RecruitmentSourceOther,
 		arg.Response,
+		arg.McdiPercentile,
+		arg.McdiDate,
 		arg.ID,
 	)
 	var i Child
@@ -415,6 +429,8 @@ func (q *Queries) UpdateChild(ctx context.Context, arg UpdateChildParams) (Child
 		&i.InactiveReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.McdiPercentile,
+		&i.McdiDate,
 	)
 	return i, err
 }

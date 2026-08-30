@@ -6,12 +6,14 @@ import (
 
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/mcdi"
 )
 
 const (
 	ActionChildCreated     = "child.created"
 	ActionChildUpdated     = "child.updated"
 	ActionChildDeactivated = "child.deactivated"
+	ActionMCDIRequested    = "child.mcdi_requested"
 )
 
 type childRequest struct {
@@ -32,6 +34,12 @@ type childRequest struct {
 	RecruitmentSourceID    *int64   `json:"recruitment_source_id"`
 	RecruitmentSourceOther string   `json:"recruitment_source_other"`
 	Response               string   `json:"response"`
+	// MCDIPercentile/MCDIDate are manual staff data entry, matching
+	// legacy's last_mcdi_pct/last_mcdi_date -- nothing writes them
+	// automatically. Ignored by handleCreateChild (a new child can't
+	// have results yet); only handleUpdateChild uses them.
+	MCDIPercentile *float64 `json:"mcdi_percentile"`
+	MCDIDate       *string  `json:"mcdi_date"`
 }
 
 type childResponse struct {
@@ -54,6 +62,8 @@ type childResponse struct {
 	RecruitmentSourceID    *int64    `json:"recruitment_source_id"`
 	RecruitmentSourceOther string    `json:"recruitment_source_other"`
 	Response               string    `json:"response"`
+	MCDIPercentile         *float64  `json:"mcdi_percentile"`
+	MCDIDate               *string   `json:"mcdi_date"`
 	Deactivated            bool      `json:"deactivated"`
 	InactiveReason         string    `json:"inactive_reason"`
 	CreatedAt              time.Time `json:"created_at"`
@@ -81,6 +91,8 @@ func childToResponse(c db.Child) childResponse {
 		RecruitmentSourceID:    c.RecruitmentSourceID,
 		RecruitmentSourceOther: c.RecruitmentSourceOther,
 		Response:               c.Response,
+		MCDIPercentile:         numericToPtr(c.McdiPercentile),
+		MCDIDate:               dateToPtr(c.McdiDate),
 		Deactivated:            c.DeactivatedAt.Valid,
 		InactiveReason:         c.InactiveReason,
 		CreatedAt:              c.CreatedAt.Time,
@@ -227,6 +239,16 @@ func (s *Server) handleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid birth_weight")
 		return
 	}
+	mcdiPercentile, err := ptrToNumeric(req.MCDIPercentile)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid mcdi_percentile")
+		return
+	}
+	mcdiDate, err := ptrToDate(req.MCDIDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid mcdi_date")
+		return
+	}
 
 	child, err := s.queries.UpdateChild(r.Context(), db.UpdateChildParams{
 		ID:                     id,
@@ -247,6 +269,8 @@ func (s *Server) handleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		RecruitmentSourceID:    req.RecruitmentSourceID,
 		RecruitmentSourceOther: req.RecruitmentSourceOther,
 		Response:               req.Response,
+		McdiPercentile:         mcdiPercentile,
+		McdiDate:               mcdiDate,
 	})
 	if err != nil {
 		s.writeDBError(w, err)
@@ -349,4 +373,63 @@ func (s *Server) handleSearchChildren(w http.ResponseWriter, r *http.Request) {
 		resp[i] = childToResponse(c)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleRequestMCDI asks daxlabbase/cdibase to email the family a
+// MacArthur-Bates CDI survey link -- a direct port of legacy's manual
+// "Request MCDI" button (no automation, no dedup, repeatable). Unlike
+// legacy, which captured the API's response and never inspected it
+// (always reporting success), a real failure here becomes a real error
+// response instead of a false-positive success message.
+func (s *Server) handleRequestMCDI(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r, "childID")
+	if !ok {
+		return
+	}
+
+	child, err := s.queries.GetChildByID(r.Context(), id)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+	if !child.BirthDate.Valid {
+		writeError(w, http.StatusBadRequest, "child has no birth date on file")
+		return
+	}
+
+	guardians, err := s.queries.ListGuardiansByFamily(r.Context(), child.FamilyID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+	var guardianEmail string
+	if len(guardians) > 0 {
+		guardianEmail = guardians[0].Email
+	}
+	if guardianEmail == "" {
+		writeError(w, http.StatusBadRequest, "no guardian email on file")
+		return
+	}
+
+	err = s.mcdiClient.RequestSurvey(r.Context(), mcdi.Request{
+		ChildName:   child.FirstName + " " + child.LastName,
+		ParentEmail: guardianEmail,
+		Gender:      mcdi.GenderFor(child.Sex),
+		Birthday:    child.BirthDate.Time.Format(dateLayout),
+		DatabaseID:  child.ID,
+	})
+	if err != nil {
+		s.logger.Error("request mcdi survey", "child_id", child.ID, "error", err)
+		writeError(w, http.StatusBadGateway, "failed to request mcdi survey")
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionMCDIRequested,
+		EntityType:  ptr("child"),
+		EntityID:    &child.ID,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
 }

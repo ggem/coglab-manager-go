@@ -28,6 +28,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/dbtest"
 	"github.com/ggem/coglab-manager-go/internal/mail/mailfake"
+	"github.com/ggem/coglab-manager-go/internal/mcdi/mcdifake"
 	"github.com/ggem/coglab-manager-go/internal/reminders"
 )
 
@@ -73,7 +74,7 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -164,7 +165,7 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -347,7 +348,7 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -572,7 +573,7 @@ func TestMatchingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -783,7 +784,7 @@ func TestReportingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -975,7 +976,7 @@ func TestNewsletterExportFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1306,6 +1307,141 @@ func numericFor(t *testing.T, f float64) pgtype.Numeric {
 		t.Fatalf("ptrToNumeric(%v): %v", f, err)
 	}
 	return n
+}
+
+// TestRequestMCDIFlow_Integration exercises handleRequestMCDI end to
+// end against real Postgres, with a fake mcdi.Client standing in for
+// daxlabbase/cdibase (the same technique M8's tests use mailfake.Sender
+// for) so the test can assert on exactly what was requested without a
+// real external service.
+func TestRequestMCDIFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email: fmt.Sprintf("mcdi-actor-%d@example.edu", time.Now().UnixNano()), FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+
+	family, err := testQueries.CreateFamily(ctx, db.CreateFamilyParams{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"})
+	if err != nil {
+		t.Fatalf("CreateFamily: %v", err)
+	}
+	guardianEmail := fmt.Sprintf("guardian-%d@example.edu", time.Now().UnixNano())
+	if _, err := testQueries.CreateGuardian(ctx, db.CreateGuardianParams{
+		FamilyID: family.ID, FirstName: "Parent", LastName: "One", Education: "unknown", Email: guardianEmail,
+	}); err != nil {
+		t.Fatalf("CreateGuardian: %v", err)
+	}
+	child, err := testQueries.CreateChild(ctx, db.CreateChildParams{
+		FamilyID: family.ID, FirstName: "Kid", LastName: "Test", Sex: "male",
+		BirthDate:     pgtype.Date{Time: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC), Valid: true},
+		RaceEthnicity: []string{}, Languages: []string{}, Response: "unknown", CreatedByUserID: actor.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateChild: %v", err)
+	}
+
+	mcdiClient := &mcdifake.Client{}
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, mcdiClient, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/children/%d/request-mcdi", child.ID), nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("request-mcdi status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	sent := mcdiClient.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("Sent() = %+v, want exactly one request", sent)
+	}
+	if sent[0].ChildName != "Kid Test" || sent[0].ParentEmail != guardianEmail || sent[0].Gender != "male" || sent[0].Birthday != "2024-01-15" || sent[0].DatabaseID != child.ID {
+		t.Errorf("request = %+v, want ChildName=Kid Test ParentEmail=%s Gender=male Birthday=2024-01-15 DatabaseID=%d", sent[0], guardianEmail, child.ID)
+	}
+
+	actions, err := auditEventsForUser(ctx, actor.ID)
+	if err != nil {
+		t.Fatalf("auditEventsForUser: %v", err)
+	}
+	found := false
+	for _, a := range actions {
+		if a == ActionMCDIRequested {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("audit actions = %v, want %q among them", actions, ActionMCDIRequested)
+	}
+}
+
+// TestRequestMCDIFlow_NoGuardianEmail_Integration confirms the 400 path
+// against a real family with a guardian on file but no email address.
+func TestRequestMCDIFlow_NoGuardianEmail_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email: fmt.Sprintf("mcdi-noemail-actor-%d@example.edu", time.Now().UnixNano()), FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+
+	family, err := testQueries.CreateFamily(ctx, db.CreateFamilyParams{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"})
+	if err != nil {
+		t.Fatalf("CreateFamily: %v", err)
+	}
+	if _, err := testQueries.CreateGuardian(ctx, db.CreateGuardianParams{
+		FamilyID: family.ID, FirstName: "Parent", LastName: "One", Education: "unknown", Email: "",
+	}); err != nil {
+		t.Fatalf("CreateGuardian: %v", err)
+	}
+	child, err := testQueries.CreateChild(ctx, db.CreateChildParams{
+		FamilyID: family.ID, FirstName: "Kid", LastName: "Test", Sex: "male",
+		BirthDate:     pgtype.Date{Time: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC), Valid: true},
+		RaceEthnicity: []string{}, Languages: []string{}, Response: "unknown", CreatedByUserID: actor.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateChild: %v", err)
+	}
+
+	mcdiClient := &mcdifake.Client{}
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, mcdiClient, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/children/%d/request-mcdi", child.ID), nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("request-mcdi status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
+	}
+	if len(mcdiClient.Sent()) != 0 {
+		t.Errorf("Sent() = %+v, want none", mcdiClient.Sent())
+	}
 }
 
 func auditEventsForUser(ctx context.Context, userID int64) ([]string, error) {

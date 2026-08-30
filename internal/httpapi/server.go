@@ -15,31 +15,35 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/mcdi"
 )
 
-// Server holds the dependencies HTTP handlers need. authenticator is typed
-// as an interface, since it's the one dependency here a caller might
-// plausibly want to substitute (e.g. a test double, or a future SSO
-// authenticator); sessions and audit are concrete types because
-// *auth.SessionManager and *audit.Recorder are each the only real
-// implementation and aren't swapped out. queries is used directly by
-// handlers with no business logic beyond CRUD (families, guardians, ...);
-// if that logic grows past what a handler should own, it gets its own
-// domain package the way auth and audit already have.
+// Server holds the dependencies HTTP handlers need. authenticator and
+// mcdiClient are typed as interfaces, since each is a dependency here a
+// caller might plausibly want to substitute (a test double, or -- for
+// authenticator -- a future SSO authenticator); sessions and audit are
+// concrete types because *auth.SessionManager and *audit.Recorder are
+// each the only real implementation and aren't swapped out. queries is
+// used directly by handlers with no business logic beyond CRUD
+// (families, guardians, ...); if that logic grows past what a handler
+// should own, it gets its own domain package the way auth and audit
+// already have.
 type Server struct {
 	authenticator auth.LocalAuthenticator
 	sessions      *auth.SessionManager
 	audit         *audit.Recorder
 	queries       db.Querier
+	mcdiClient    mcdi.Client
 	logger        *slog.Logger
 }
 
-func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, logger *slog.Logger) *Server {
+func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, mcdiClient mcdi.Client, logger *slog.Logger) *Server {
 	return &Server{
 		authenticator: authenticator,
 		sessions:      sessions,
 		audit:         recorder,
 		queries:       queries,
+		mcdiClient:    mcdiClient,
 		logger:        logger,
 	}
 }
@@ -84,6 +88,7 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/", s.handleGetChild)
 				r.Put("/", s.handleUpdateChild)
 				r.Post("/deactivate", s.handleDeactivateChild)
+				r.Post("/request-mcdi", s.handleRequestMCDI)
 				r.Route("/notes", func(r chi.Router) {
 					r.Post("/", s.handleCreateChildNote)
 					r.Get("/", s.handleListChildNotes)

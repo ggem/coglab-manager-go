@@ -21,6 +21,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/httpapi"
 	"github.com/ggem/coglab-manager-go/internal/mail"
+	"github.com/ggem/coglab-manager-go/internal/mcdi"
 	"github.com/ggem/coglab-manager-go/internal/reminders"
 )
 
@@ -52,12 +53,18 @@ func run() error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
+	mcdiClient, err := newMCDIClient()
+	if err != nil {
+		return err
+	}
+
 	queries := db.New(pool)
 	server := httpapi.NewServer(
 		auth.NewPasswordAuthenticator(queries),
 		auth.NewSessionManager(queries, secureCookies()),
 		audit.NewRecorder(queries),
 		queries,
+		mcdiClient,
 		logger,
 	)
 
@@ -132,6 +139,25 @@ func newMailer() (mail.Sender, error) {
 	}
 
 	return mail.NewSMTPSender(smtpAddr, smtpFrom, smtpAuth), nil
+}
+
+// newMCDIClient builds the daxlabbase/cdibase client children's "Request
+// MCDI" action sends through, from MCDI_API_URL and MCDI_API_KEY, both
+// required the same way SMTP_ADDR/SMTP_FROM are -- core functionality
+// being wired at startup, not an optional add-on. MCDI_TYPE_PARAM is
+// optional: the current cdibase tool's "cdi_type" is mcdi.NewAPIClient's
+// own default, so this only needs setting for a still-live older
+// daxlabbase instance expecting the pre-rename "mcdi_type".
+func newMCDIClient() (mcdi.Client, error) {
+	apiURL := os.Getenv("MCDI_API_URL")
+	if apiURL == "" {
+		return nil, fmt.Errorf("MCDI_API_URL environment variable is required")
+	}
+	apiKey := os.Getenv("MCDI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("MCDI_API_KEY environment variable is required")
+	}
+	return mcdi.NewAPIClient(apiURL, apiKey, os.Getenv("MCDI_TYPE_PARAM")), nil
 }
 
 // familyReminderLeadTime parses FAMILY_REMINDER_LEAD_TIME (a
