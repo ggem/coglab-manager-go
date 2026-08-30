@@ -13,6 +13,7 @@ const (
 	ActionAppointmentCreated   = "appointment.created"
 	ActionAppointmentScheduled = "appointment.scheduled"
 	ActionAppointmentReleased  = "appointment.released"
+	ActionAppointmentArrived   = "appointment.arrived"
 )
 
 // maxSearchDays caps how many days an availability search covers in one
@@ -164,6 +165,32 @@ func (s *Server) handleReleaseAppointment(w http.ResponseWriter, r *http.Request
 	})
 
 	writeJSON(w, http.StatusOK, appointmentToResponse(released))
+}
+
+// handleArriveAppointment marks a scheduled appointment as a completed
+// visit -- the minimal signal HRC/demographics reporting needs. Only a
+// 'pending' appointment can arrive; frees the hold too, since 'arrived'
+// also falls outside appointments_one_active_hold_per_child's predicate.
+func (s *Server) handleArriveAppointment(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+
+	arrived, err := s.queries.ArriveAppointment(r.Context(), appointmentID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionAppointmentArrived,
+		EntityType:  ptr("appointment"),
+		EntityID:    &appointmentID,
+	})
+
+	writeJSON(w, http.StatusOK, appointmentToResponse(arrived))
 }
 
 type candidateSlotResponse struct {

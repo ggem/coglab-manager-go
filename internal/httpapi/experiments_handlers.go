@@ -29,6 +29,7 @@ type experimentRequest struct {
 	FilterPremies      bool     `json:"filter_premies"`
 	FilterMinLanguages int16    `json:"filter_min_languages"`
 	FilterLanguages    []string `json:"filter_languages"`
+	ProtocolID         *int64   `json:"protocol_id"`
 }
 
 type experimentResponse struct {
@@ -46,6 +47,7 @@ type experimentResponse struct {
 	FilterPremies      bool      `json:"filter_premies"`
 	FilterMinLanguages int16     `json:"filter_min_languages"`
 	FilterLanguages    []string  `json:"filter_languages"`
+	ProtocolID         *int64    `json:"protocol_id"`
 	Deactivated        bool      `json:"deactivated"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
@@ -67,6 +69,7 @@ func experimentToResponse(e db.Experiment) experimentResponse {
 		FilterPremies:      e.FilterPremies,
 		FilterMinLanguages: e.FilterMinLanguages,
 		FilterLanguages:    e.FilterLanguages,
+		ProtocolID:         e.ProtocolID,
 		Deactivated:        e.DeactivatedAt.Valid,
 		CreatedAt:          e.CreatedAt.Time,
 		UpdatedAt:          e.UpdatedAt.Time,
@@ -104,6 +107,7 @@ func (s *Server) handleCreateExperiment(w http.ResponseWriter, r *http.Request) 
 		FilterPremies:      req.FilterPremies,
 		FilterMinLanguages: req.FilterMinLanguages,
 		FilterLanguages:    nonNilSlice(req.FilterLanguages),
+		ProtocolID:         req.ProtocolID,
 	})
 	if err != nil {
 		s.writeDBError(w, err)
@@ -186,6 +190,7 @@ func (s *Server) handleUpdateExperiment(w http.ResponseWriter, r *http.Request) 
 		FilterPremies:      req.FilterPremies,
 		FilterMinLanguages: req.FilterMinLanguages,
 		FilterLanguages:    nonNilSlice(req.FilterLanguages),
+		ProtocolID:         req.ProtocolID,
 	})
 	if err != nil {
 		s.writeDBError(w, err)

@@ -314,6 +314,71 @@ func TestHandleReleaseAppointment_UnexpectedDBError(t *testing.T) {
 	}
 }
 
+func TestHandleArriveAppointment_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ArriveAppointmentFunc: func(ctx context.Context, id int64) (db.Appointment, error) {
+			return db.Appointment{ID: id, Status: "arrived"}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/arrive", cookie, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[appointmentResponse](t, rec)
+	if got.Status != "arrived" {
+		t.Errorf("response Status = %q, want %q", got.Status, "arrived")
+	}
+}
+
+// TestHandleArriveAppointment_NotFound covers an appointment that isn't
+// 'pending' (never scheduled, or already arrived/released):
+// ArriveAppointment's WHERE clause matches no row, so pgx.ErrNoRows
+// becomes a 404 via writeDBError.
+func TestHandleArriveAppointment_NotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ArriveAppointmentFunc: func(ctx context.Context, id int64) (db.Appointment, error) {
+			return db.Appointment{}, pgx.ErrNoRows
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/arrive", cookie, nil)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleArriveAppointment_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ArriveAppointmentFunc: func(ctx context.Context, id int64) (db.Appointment, error) {
+			return db.Appointment{}, assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/arrive", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
 func TestHandleListAppointmentsByExperiment_Success(t *testing.T) {
 	q := &dbfake.Querier{
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {

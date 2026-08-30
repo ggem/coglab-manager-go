@@ -45,6 +45,21 @@ func (q *Queries) AddExperimentEquipment(ctx context.Context, arg AddExperimentE
 	return err
 }
 
+const addExperimentGrant = `-- name: AddExperimentGrant :exec
+insert into experiment_grants (experiment_id, grant_id)
+values ($1, $2)
+`
+
+type AddExperimentGrantParams struct {
+	ExperimentID int64 `json:"experiment_id"`
+	GrantID      int64 `json:"grant_id"`
+}
+
+func (q *Queries) AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) error {
+	_, err := q.db.Exec(ctx, addExperimentGrant, arg.ExperimentID, arg.GrantID)
+	return err
+}
+
 const addExperimentTrainingRequirement = `-- name: AddExperimentTrainingRequirement :exec
 insert into experiment_training_requirements (experiment_id, experiment_role_id)
 values ($1, $2)
@@ -64,7 +79,7 @@ const createExperiment = `-- name: CreateExperiment :one
 insert into experiments (
     lab_id, name, description, sessions, age_range_min_months, age_range_max_months,
     start_date, end_date, status, duration_minutes, filter_premies,
-    filter_min_languages, filter_languages
+    filter_min_languages, filter_languages, protocol_id
 ) values (
     $1,
     $2,
@@ -78,9 +93,10 @@ insert into experiments (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    $14
 )
-returning id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at
+returning id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at, protocol_id
 `
 
 type CreateExperimentParams struct {
@@ -97,6 +113,7 @@ type CreateExperimentParams struct {
 	FilterPremies      bool           `json:"filter_premies"`
 	FilterMinLanguages int16          `json:"filter_min_languages"`
 	FilterLanguages    []string       `json:"filter_languages"`
+	ProtocolID         *int64         `json:"protocol_id"`
 }
 
 func (q *Queries) CreateExperiment(ctx context.Context, arg CreateExperimentParams) (Experiment, error) {
@@ -114,6 +131,7 @@ func (q *Queries) CreateExperiment(ctx context.Context, arg CreateExperimentPara
 		arg.FilterPremies,
 		arg.FilterMinLanguages,
 		arg.FilterLanguages,
+		arg.ProtocolID,
 	)
 	var i Experiment
 	err := row.Scan(
@@ -134,6 +152,7 @@ func (q *Queries) CreateExperiment(ctx context.Context, arg CreateExperimentPara
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProtocolID,
 	)
 	return i, err
 }
@@ -148,7 +167,7 @@ func (q *Queries) DeactivateExperiment(ctx context.Context, id int64) error {
 }
 
 const getExperimentByID = `-- name: GetExperimentByID :one
-select id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at from experiments where id = $1
+select id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at, protocol_id from experiments where id = $1
 `
 
 func (q *Queries) GetExperimentByID(ctx context.Context, id int64) (Experiment, error) {
@@ -172,6 +191,7 @@ func (q *Queries) GetExperimentByID(ctx context.Context, id int64) (Experiment, 
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProtocolID,
 	)
 	return i, err
 }
@@ -245,6 +265,40 @@ func (q *Queries) ListExperimentEquipment(ctx context.Context, experimentID int6
 	return items, nil
 }
 
+const listExperimentGrants = `-- name: ListExperimentGrants :many
+select grants.id, grants.lab_id, grants.name, grants.deactivated_at, grants.created_at, grants.updated_at from grants
+join experiment_grants on experiment_grants.grant_id = grants.id
+where experiment_grants.experiment_id = $1
+order by grants.id
+`
+
+func (q *Queries) ListExperimentGrants(ctx context.Context, experimentID int64) ([]Grant, error) {
+	rows, err := q.db.Query(ctx, listExperimentGrants, experimentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Grant
+	for rows.Next() {
+		var i Grant
+		if err := rows.Scan(
+			&i.ID,
+			&i.LabID,
+			&i.Name,
+			&i.DeactivatedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExperimentTrainingRequirements = `-- name: ListExperimentTrainingRequirements :many
 select experiment_roles.id, experiment_roles.lab_id, experiment_roles.name, experiment_roles.deactivated_at, experiment_roles.created_at, experiment_roles.updated_at, experiment_roles.is_sitter_role from experiment_roles
 join experiment_training_requirements
@@ -282,7 +336,7 @@ func (q *Queries) ListExperimentTrainingRequirements(ctx context.Context, experi
 }
 
 const listExperimentsByLab = `-- name: ListExperimentsByLab :many
-select id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at from experiments where lab_id = $1 order by id
+select id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at, protocol_id from experiments where lab_id = $1 order by id
 `
 
 func (q *Queries) ListExperimentsByLab(ctx context.Context, labID int64) ([]Experiment, error) {
@@ -312,6 +366,7 @@ func (q *Queries) ListExperimentsByLab(ctx context.Context, labID int64) ([]Expe
 			&i.DeactivatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProtocolID,
 		); err != nil {
 			return nil, err
 		}
@@ -353,6 +408,21 @@ func (q *Queries) RemoveExperimentEquipment(ctx context.Context, arg RemoveExper
 	return err
 }
 
+const removeExperimentGrant = `-- name: RemoveExperimentGrant :exec
+delete from experiment_grants
+where experiment_id = $1 and grant_id = $2
+`
+
+type RemoveExperimentGrantParams struct {
+	ExperimentID int64 `json:"experiment_id"`
+	GrantID      int64 `json:"grant_id"`
+}
+
+func (q *Queries) RemoveExperimentGrant(ctx context.Context, arg RemoveExperimentGrantParams) error {
+	_, err := q.db.Exec(ctx, removeExperimentGrant, arg.ExperimentID, arg.GrantID)
+	return err
+}
+
 const removeExperimentTrainingRequirement = `-- name: RemoveExperimentTrainingRequirement :exec
 delete from experiment_training_requirements
 where experiment_id = $1 and experiment_role_id = $2
@@ -381,9 +451,10 @@ update experiments set
     duration_minutes = $9,
     filter_premies = $10,
     filter_min_languages = $11,
-    filter_languages = $12
-where id = $13
-returning id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at
+    filter_languages = $12,
+    protocol_id = $13
+where id = $14
+returning id, lab_id, name, description, sessions, age_range_min_months, age_range_max_months, start_date, end_date, status, duration_minutes, filter_premies, filter_min_languages, filter_languages, deactivated_at, created_at, updated_at, protocol_id
 `
 
 type UpdateExperimentParams struct {
@@ -399,6 +470,7 @@ type UpdateExperimentParams struct {
 	FilterPremies      bool           `json:"filter_premies"`
 	FilterMinLanguages int16          `json:"filter_min_languages"`
 	FilterLanguages    []string       `json:"filter_languages"`
+	ProtocolID         *int64         `json:"protocol_id"`
 	ID                 int64          `json:"id"`
 }
 
@@ -416,6 +488,7 @@ func (q *Queries) UpdateExperiment(ctx context.Context, arg UpdateExperimentPara
 		arg.FilterPremies,
 		arg.FilterMinLanguages,
 		arg.FilterLanguages,
+		arg.ProtocolID,
 		arg.ID,
 	)
 	var i Experiment
@@ -437,6 +510,7 @@ func (q *Queries) UpdateExperiment(ctx context.Context, arg UpdateExperimentPara
 		&i.DeactivatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProtocolID,
 	)
 	return i, err
 }

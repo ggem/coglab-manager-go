@@ -413,3 +413,136 @@ func TestHandleListExperimentTrainingRequirements_Success(t *testing.T) {
 		t.Errorf("response = %+v", got)
 	}
 }
+
+func TestHandleAddExperimentGrant_Success(t *testing.T) {
+	var captured db.AddExperimentGrantParams
+	var capturedAudit db.CreateAuditEventParams
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) error {
+			captured = arg
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			capturedAudit = arg
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/grants/", cookie, addGrantRequest{GrantID: 5})
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ExperimentID != 3 || captured.GrantID != 5 {
+		t.Errorf("AddExperimentGrant params = %+v", captured)
+	}
+	if capturedAudit.Action != ActionExperimentGrantAdded {
+		t.Errorf("audit action = %q, want %q", capturedAudit.Action, ActionExperimentGrantAdded)
+	}
+}
+
+func TestHandleAddExperimentGrant_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) error {
+			return assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/grants/", cookie, addGrantRequest{GrantID: 5})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleRemoveExperimentGrant_Success(t *testing.T) {
+	var captured db.RemoveExperimentGrantParams
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		RemoveExperimentGrantFunc: func(ctx context.Context, arg db.RemoveExperimentGrantParams) error {
+			captured = arg
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/grants/5", cookie, nil)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ExperimentID != 3 || captured.GrantID != 5 {
+		t.Errorf("RemoveExperimentGrant params = %+v", captured)
+	}
+}
+
+func TestHandleRemoveExperimentGrant_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		RemoveExperimentGrantFunc: func(ctx context.Context, arg db.RemoveExperimentGrantParams) error {
+			return assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/grants/5", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleListExperimentGrants_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		ListExperimentGrantsFunc: func(ctx context.Context, experimentID int64) ([]db.Grant, error) {
+			return []db.Grant{{ID: 5, Name: "NIH-R01-12345"}}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/experiments/3/grants/", cookie, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[[]grantResponse](t, rec)
+	if len(got) != 1 || got[0].Name != "NIH-R01-12345" {
+		t.Errorf("response = %+v", got)
+	}
+}
+
+func TestHandleListExperimentGrants_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		ListExperimentGrantsFunc: func(ctx context.Context, experimentID int64) ([]db.Grant, error) {
+			return nil, assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/experiments/3/grants/", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}

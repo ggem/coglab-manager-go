@@ -45,6 +45,16 @@ set status = 'released'
 where id = sqlc.arg(id) and status in ('to_be_scheduled', 'pending')
 returning *;
 
+-- name: ArriveAppointment :one
+-- Only a scheduled ('pending') appointment can arrive -- an unscheduled
+-- one has no date/time for a visit to have happened at. Frees the hold,
+-- same as ReleaseAppointment, since 'arrived' also falls outside
+-- appointments_one_active_hold_per_child's predicate.
+update appointments
+set status = 'arrived'
+where id = sqlc.arg(id) and status = 'pending'
+returning *;
+
 -- name: CreateAppointmentExperimenter :one
 insert into appointment_experimenters (appointment_id, user_id, experiment_role_id, is_greeter)
 values (sqlc.arg(appointment_id), sqlc.arg(user_id), sqlc.arg(experiment_role_id), sqlc.arg(is_greeter))

@@ -130,6 +130,28 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/", s.handleCreateScheduleBlocking)
 				r.Get("/", s.handleListScheduleBlockingsByLab)
 			})
+			r.Route("/protocols", func(r chi.Router) {
+				r.Post("/", s.handleCreateProtocol)
+				r.Get("/", s.handleListProtocolsByLab)
+			})
+			r.Route("/grants", func(r chi.Router) {
+				r.Post("/", s.handleCreateGrant)
+				r.Get("/", s.handleListGrantsByLab)
+			})
+			r.Route("/zip-codes", func(r chi.Router) {
+				r.Post("/", s.handleCreateZipCode)
+				r.Get("/", s.handleListZipCodesByLab)
+			})
+			r.Route("/newsletters", func(r chi.Router) {
+				r.Post("/", s.handleCreateNewsletter)
+				r.Get("/", s.handleListNewslettersByLab)
+				r.Get("/export", s.handleExportNewsletter)
+			})
+			r.Route("/reports", func(r chi.Router) {
+				r.Get("/nih", s.handleNIHReport)
+				r.Get("/hrc", s.handleHRCReport)
+				r.Get("/zip-codes", s.handleZipCodesReport)
+			})
 		})
 
 		r.Route("/availability/general/{availabilityID}", func(r chi.Router) {
@@ -143,6 +165,30 @@ func (s *Server) Routes() http.Handler {
 		r.Route("/schedule-blockings/{blockingID}", func(r chi.Router) {
 			r.Use(s.requireLabMemberForScheduleBlocking)
 			r.Post("/deactivate", s.handleDeactivateScheduleBlocking)
+		})
+		r.Route("/protocols/{protocolID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForProtocol)
+			r.Get("/", s.handleGetProtocol)
+			r.Put("/", s.handleUpdateProtocol)
+			r.Post("/deactivate", s.handleDeactivateProtocol)
+		})
+		r.Route("/grants/{grantID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForGrant)
+			r.Get("/", s.handleGetGrant)
+			r.Put("/", s.handleUpdateGrant)
+			r.Post("/deactivate", s.handleDeactivateGrant)
+		})
+		r.Route("/zip-codes/{zipCodeID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForZipCode)
+			r.Get("/", s.handleGetZipCode)
+			r.Put("/", s.handleUpdateZipCode)
+			r.Post("/deactivate", s.handleDeactivateZipCode)
+		})
+		r.Route("/newsletters/{newsletterID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForNewsletter)
+			r.Get("/", s.handleGetNewsletter)
+			r.Post("/deactivate", s.handleDeactivateNewsletter)
+			r.Post("/mark-sent", s.handleMarkNewsletterSent)
 		})
 
 		r.Route("/conditions/{conditionID}", func(r chi.Router) {
@@ -204,6 +250,12 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/appointments", s.handleCreateAppointment)
 			r.Get("/appointments", s.handleListAppointmentsByExperiment)
 			r.Post("/hold-children", s.handleHoldChildrenForExperiment)
+			r.Route("/grants", func(r chi.Router) {
+				r.Post("/", s.handleAddExperimentGrant)
+				r.Get("/", s.handleListExperimentGrants)
+				r.Delete("/{grantID}", s.handleRemoveExperimentGrant)
+			})
+			r.Get("/reports/demographics", s.handleDemographicsReport)
 		})
 
 		r.Route("/appointments/{appointmentID}", func(r chi.Router) {
@@ -211,6 +263,7 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/availability", s.handleSearchAppointmentAvailability)
 			r.Post("/schedule", s.handleScheduleAppointment)
 			r.Post("/release", s.handleReleaseAppointment)
+			r.Post("/arrive", s.handleArriveAppointment)
 		})
 	})
 

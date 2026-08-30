@@ -62,6 +62,43 @@ type Querier struct {
 	AddExperimentTrainingRequirementFunc    func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error
 	RemoveExperimentTrainingRequirementFunc func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error
 	ListExperimentTrainingRequirementsFunc  func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error)
+	AddExperimentGrantFunc                  func(ctx context.Context, arg db.AddExperimentGrantParams) error
+	RemoveExperimentGrantFunc               func(ctx context.Context, arg db.RemoveExperimentGrantParams) error
+	ListExperimentGrantsFunc                func(ctx context.Context, experimentID int64) ([]db.Grant, error)
+
+	CreateProtocolFunc     func(ctx context.Context, arg db.CreateProtocolParams) (db.Protocol, error)
+	GetProtocolByIDFunc    func(ctx context.Context, id int64) (db.Protocol, error)
+	ListProtocolsByLabFunc func(ctx context.Context, labID int64) ([]db.Protocol, error)
+	UpdateProtocolFunc     func(ctx context.Context, arg db.UpdateProtocolParams) (db.Protocol, error)
+	DeactivateProtocolFunc func(ctx context.Context, id int64) error
+
+	CreateGrantFunc     func(ctx context.Context, arg db.CreateGrantParams) (db.Grant, error)
+	GetGrantByIDFunc    func(ctx context.Context, id int64) (db.Grant, error)
+	ListGrantsByLabFunc func(ctx context.Context, labID int64) ([]db.Grant, error)
+	UpdateGrantFunc     func(ctx context.Context, arg db.UpdateGrantParams) (db.Grant, error)
+	DeactivateGrantFunc func(ctx context.Context, id int64) error
+
+	CreateZipCodeFunc     func(ctx context.Context, arg db.CreateZipCodeParams) (db.Zipcode, error)
+	GetZipCodeByIDFunc    func(ctx context.Context, id int64) (db.Zipcode, error)
+	ListZipCodesByLabFunc func(ctx context.Context, labID int64) ([]db.Zipcode, error)
+	UpdateZipCodeFunc     func(ctx context.Context, arg db.UpdateZipCodeParams) (db.Zipcode, error)
+	DeactivateZipCodeFunc func(ctx context.Context, id int64) error
+
+	CreateNewsletterFunc                  func(ctx context.Context, arg db.CreateNewsletterParams) (db.Newsletter, error)
+	GetNewsletterByIDFunc                 func(ctx context.Context, id int64) (db.Newsletter, error)
+	ListNewslettersByLabFunc              func(ctx context.Context, labID int64) ([]db.Newsletter, error)
+	DeactivateNewsletterFunc              func(ctx context.Context, id int64) error
+	ListEligibleFamiliesForNewsletterFunc func(ctx context.Context, arg db.ListEligibleFamiliesForNewsletterParams) ([]db.ListEligibleFamiliesForNewsletterRow, error)
+	MarkNewsletterSentFunc                func(ctx context.Context, arg db.MarkNewsletterSentParams) error
+
+	ArriveAppointmentFunc func(ctx context.Context, id int64) (db.Appointment, error)
+
+	NIHReportByCategoryFunc func(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error)
+	NIHReportTotalsFunc     func(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error)
+	HRCReportByProtocolFunc func(ctx context.Context, arg db.HRCReportByProtocolParams) ([]db.HRCReportByProtocolRow, error)
+	HRCReportTotalFunc      func(ctx context.Context, arg db.HRCReportTotalParams) (int64, error)
+	DemographicsReportFunc  func(ctx context.Context, arg db.DemographicsReportParams) ([]db.DemographicsReportRow, error)
+	ZipCodesReportFunc      func(ctx context.Context, arg db.ZipCodesReportParams) ([]db.ZipCodesReportRow, error)
 
 	CreateConditionFunc                func(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error)
 	GetConditionByIDFunc               func(ctx context.Context, id int64) (db.Condition, error)
@@ -415,6 +452,223 @@ func (q *Querier) ListExperimentTrainingRequirements(ctx context.Context, experi
 		panic("dbfake: ListExperimentTrainingRequirements not implemented")
 	}
 	return q.ListExperimentTrainingRequirementsFunc(ctx, experimentID)
+}
+
+func (q *Querier) AddExperimentGrant(ctx context.Context, arg db.AddExperimentGrantParams) error {
+	if q.AddExperimentGrantFunc == nil {
+		panic("dbfake: AddExperimentGrant not implemented")
+	}
+	return q.AddExperimentGrantFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveExperimentGrant(ctx context.Context, arg db.RemoveExperimentGrantParams) error {
+	if q.RemoveExperimentGrantFunc == nil {
+		panic("dbfake: RemoveExperimentGrant not implemented")
+	}
+	return q.RemoveExperimentGrantFunc(ctx, arg)
+}
+
+func (q *Querier) ListExperimentGrants(ctx context.Context, experimentID int64) ([]db.Grant, error) {
+	if q.ListExperimentGrantsFunc == nil {
+		panic("dbfake: ListExperimentGrants not implemented")
+	}
+	return q.ListExperimentGrantsFunc(ctx, experimentID)
+}
+
+func (q *Querier) CreateProtocol(ctx context.Context, arg db.CreateProtocolParams) (db.Protocol, error) {
+	if q.CreateProtocolFunc == nil {
+		panic("dbfake: CreateProtocol not implemented")
+	}
+	return q.CreateProtocolFunc(ctx, arg)
+}
+
+func (q *Querier) GetProtocolByID(ctx context.Context, id int64) (db.Protocol, error) {
+	if q.GetProtocolByIDFunc == nil {
+		panic("dbfake: GetProtocolByID not implemented")
+	}
+	return q.GetProtocolByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListProtocolsByLab(ctx context.Context, labID int64) ([]db.Protocol, error) {
+	if q.ListProtocolsByLabFunc == nil {
+		panic("dbfake: ListProtocolsByLab not implemented")
+	}
+	return q.ListProtocolsByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateProtocol(ctx context.Context, arg db.UpdateProtocolParams) (db.Protocol, error) {
+	if q.UpdateProtocolFunc == nil {
+		panic("dbfake: UpdateProtocol not implemented")
+	}
+	return q.UpdateProtocolFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateProtocol(ctx context.Context, id int64) error {
+	if q.DeactivateProtocolFunc == nil {
+		panic("dbfake: DeactivateProtocol not implemented")
+	}
+	return q.DeactivateProtocolFunc(ctx, id)
+}
+
+func (q *Querier) CreateGrant(ctx context.Context, arg db.CreateGrantParams) (db.Grant, error) {
+	if q.CreateGrantFunc == nil {
+		panic("dbfake: CreateGrant not implemented")
+	}
+	return q.CreateGrantFunc(ctx, arg)
+}
+
+func (q *Querier) GetGrantByID(ctx context.Context, id int64) (db.Grant, error) {
+	if q.GetGrantByIDFunc == nil {
+		panic("dbfake: GetGrantByID not implemented")
+	}
+	return q.GetGrantByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListGrantsByLab(ctx context.Context, labID int64) ([]db.Grant, error) {
+	if q.ListGrantsByLabFunc == nil {
+		panic("dbfake: ListGrantsByLab not implemented")
+	}
+	return q.ListGrantsByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateGrant(ctx context.Context, arg db.UpdateGrantParams) (db.Grant, error) {
+	if q.UpdateGrantFunc == nil {
+		panic("dbfake: UpdateGrant not implemented")
+	}
+	return q.UpdateGrantFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateGrant(ctx context.Context, id int64) error {
+	if q.DeactivateGrantFunc == nil {
+		panic("dbfake: DeactivateGrant not implemented")
+	}
+	return q.DeactivateGrantFunc(ctx, id)
+}
+
+func (q *Querier) CreateZipCode(ctx context.Context, arg db.CreateZipCodeParams) (db.Zipcode, error) {
+	if q.CreateZipCodeFunc == nil {
+		panic("dbfake: CreateZipCode not implemented")
+	}
+	return q.CreateZipCodeFunc(ctx, arg)
+}
+
+func (q *Querier) GetZipCodeByID(ctx context.Context, id int64) (db.Zipcode, error) {
+	if q.GetZipCodeByIDFunc == nil {
+		panic("dbfake: GetZipCodeByID not implemented")
+	}
+	return q.GetZipCodeByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListZipCodesByLab(ctx context.Context, labID int64) ([]db.Zipcode, error) {
+	if q.ListZipCodesByLabFunc == nil {
+		panic("dbfake: ListZipCodesByLab not implemented")
+	}
+	return q.ListZipCodesByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateZipCode(ctx context.Context, arg db.UpdateZipCodeParams) (db.Zipcode, error) {
+	if q.UpdateZipCodeFunc == nil {
+		panic("dbfake: UpdateZipCode not implemented")
+	}
+	return q.UpdateZipCodeFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateZipCode(ctx context.Context, id int64) error {
+	if q.DeactivateZipCodeFunc == nil {
+		panic("dbfake: DeactivateZipCode not implemented")
+	}
+	return q.DeactivateZipCodeFunc(ctx, id)
+}
+
+func (q *Querier) CreateNewsletter(ctx context.Context, arg db.CreateNewsletterParams) (db.Newsletter, error) {
+	if q.CreateNewsletterFunc == nil {
+		panic("dbfake: CreateNewsletter not implemented")
+	}
+	return q.CreateNewsletterFunc(ctx, arg)
+}
+
+func (q *Querier) GetNewsletterByID(ctx context.Context, id int64) (db.Newsletter, error) {
+	if q.GetNewsletterByIDFunc == nil {
+		panic("dbfake: GetNewsletterByID not implemented")
+	}
+	return q.GetNewsletterByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListNewslettersByLab(ctx context.Context, labID int64) ([]db.Newsletter, error) {
+	if q.ListNewslettersByLabFunc == nil {
+		panic("dbfake: ListNewslettersByLab not implemented")
+	}
+	return q.ListNewslettersByLabFunc(ctx, labID)
+}
+
+func (q *Querier) DeactivateNewsletter(ctx context.Context, id int64) error {
+	if q.DeactivateNewsletterFunc == nil {
+		panic("dbfake: DeactivateNewsletter not implemented")
+	}
+	return q.DeactivateNewsletterFunc(ctx, id)
+}
+
+func (q *Querier) ListEligibleFamiliesForNewsletter(ctx context.Context, arg db.ListEligibleFamiliesForNewsletterParams) ([]db.ListEligibleFamiliesForNewsletterRow, error) {
+	if q.ListEligibleFamiliesForNewsletterFunc == nil {
+		panic("dbfake: ListEligibleFamiliesForNewsletter not implemented")
+	}
+	return q.ListEligibleFamiliesForNewsletterFunc(ctx, arg)
+}
+
+func (q *Querier) MarkNewsletterSent(ctx context.Context, arg db.MarkNewsletterSentParams) error {
+	if q.MarkNewsletterSentFunc == nil {
+		panic("dbfake: MarkNewsletterSent not implemented")
+	}
+	return q.MarkNewsletterSentFunc(ctx, arg)
+}
+
+func (q *Querier) ArriveAppointment(ctx context.Context, id int64) (db.Appointment, error) {
+	if q.ArriveAppointmentFunc == nil {
+		panic("dbfake: ArriveAppointment not implemented")
+	}
+	return q.ArriveAppointmentFunc(ctx, id)
+}
+
+func (q *Querier) NIHReportByCategory(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error) {
+	if q.NIHReportByCategoryFunc == nil {
+		panic("dbfake: NIHReportByCategory not implemented")
+	}
+	return q.NIHReportByCategoryFunc(ctx, arg)
+}
+
+func (q *Querier) NIHReportTotals(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error) {
+	if q.NIHReportTotalsFunc == nil {
+		panic("dbfake: NIHReportTotals not implemented")
+	}
+	return q.NIHReportTotalsFunc(ctx, arg)
+}
+
+func (q *Querier) HRCReportByProtocol(ctx context.Context, arg db.HRCReportByProtocolParams) ([]db.HRCReportByProtocolRow, error) {
+	if q.HRCReportByProtocolFunc == nil {
+		panic("dbfake: HRCReportByProtocol not implemented")
+	}
+	return q.HRCReportByProtocolFunc(ctx, arg)
+}
+
+func (q *Querier) HRCReportTotal(ctx context.Context, arg db.HRCReportTotalParams) (int64, error) {
+	if q.HRCReportTotalFunc == nil {
+		panic("dbfake: HRCReportTotal not implemented")
+	}
+	return q.HRCReportTotalFunc(ctx, arg)
+}
+
+func (q *Querier) DemographicsReport(ctx context.Context, arg db.DemographicsReportParams) ([]db.DemographicsReportRow, error) {
+	if q.DemographicsReportFunc == nil {
+		panic("dbfake: DemographicsReport not implemented")
+	}
+	return q.DemographicsReportFunc(ctx, arg)
+}
+
+func (q *Querier) ZipCodesReport(ctx context.Context, arg db.ZipCodesReportParams) ([]db.ZipCodesReportRow, error) {
+	if q.ZipCodesReportFunc == nil {
+		panic("dbfake: ZipCodesReport not implemented")
+	}
+	return q.ZipCodesReportFunc(ctx, arg)
 }
 
 func (q *Querier) CreateCondition(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error) {

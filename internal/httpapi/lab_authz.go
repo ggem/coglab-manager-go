@@ -216,3 +216,75 @@ func (s *Server) requireLabMemberForExperiment(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+func (s *Server) requireLabMemberForProtocol(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "protocolID")
+		if !ok {
+			return
+		}
+		protocol, err := s.queries.GetProtocolByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, protocol.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLabMemberForGrant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "grantID")
+		if !ok {
+			return
+		}
+		grant, err := s.queries.GetGrantByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, grant.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLabMemberForZipCode(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "zipCodeID")
+		if !ok {
+			return
+		}
+		zipCode, err := s.queries.GetZipCodeByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, zipCode.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLabMemberForNewsletter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "newsletterID")
+		if !ok {
+			return
+		}
+		newsletter, err := s.queries.GetNewsletterByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, newsletter.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

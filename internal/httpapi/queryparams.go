@@ -3,6 +3,8 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Default and maximum "limit" for search endpoints.
@@ -67,6 +69,33 @@ func queryInt64Ptr(w http.ResponseWriter, r *http.Request, name string) (val *in
 		return nil, false
 	}
 	return &n, true
+}
+
+// queryDateRange parses the required "start_date"/"end_date" query
+// parameters as pgtype.Date, writing a 400 and returning ok=false if
+// either is missing or invalid -- the shape every report endpoint here
+// needs its reporting window in.
+func queryDateRange(w http.ResponseWriter, r *http.Request) (start, end pgtype.Date, ok bool) {
+	startStr := queryString(r, "start_date")
+	endStr := queryString(r, "end_date")
+	if startStr == nil || endStr == nil {
+		writeError(w, http.StatusBadRequest, "start_date and end_date are required")
+		return pgtype.Date{}, pgtype.Date{}, false
+	}
+	start, err := ptrToDate(startStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid start_date")
+		return pgtype.Date{}, pgtype.Date{}, false
+	}
+	end, err = ptrToDate(endStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid end_date")
+		return pgtype.Date{}, pgtype.Date{}, false
+	}
+	if end.Time.Before(start.Time) {
+		start, end = end, start
+	}
+	return start, end, true
 }
 
 // queryLimit parses the "limit" query parameter, defaulting to def and
