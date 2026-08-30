@@ -1,36 +1,38 @@
-import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import LoginForm from './LoginForm'
+import Layout from './Layout'
 import ParticipantSearch from './ParticipantSearch'
-import { logout, type User } from './api'
+import { getMe, type User } from './api'
 import './App.css'
 
-// There's no "check for an existing session" endpoint yet, so login state
-// lives only in memory -- a page refresh always requires signing in again.
-// Revisit once there's a real need to persist across reloads.
 function App() {
-  const [user, setUser] = useState<User | null>(null)
+  const queryClient = useQueryClient()
+  // retry: false -- a 401 here just means "not logged in," not a
+  // transient failure worth retrying.
+  const { data, isLoading } = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    retry: false,
+  })
 
-  async function handleLogout() {
-    await logout()
-    setUser(null)
+  if (isLoading) {
+    return <p className="loading">Loading…</p>
   }
 
-  if (!user) {
-    return <LoginForm onLogin={setUser} />
+  if (!data) {
+    return (
+      <LoginForm onLogin={(user: User) => queryClient.setQueryData(['me'], { user })} />
+    )
   }
 
   return (
-    <div className="app">
-      <header>
-        <span>
-          Signed in as {user.first_name} {user.last_name}
-        </span>
-        <button type="button" onClick={handleLogout}>
-          Sign out
-        </button>
-      </header>
-      <ParticipantSearch />
-    </div>
+    <Routes>
+      <Route element={<Layout user={data.user} />}>
+        <Route index element={<Navigate to="/participants" replace />} />
+        <Route path="participants" element={<ParticipantSearch />} />
+      </Route>
+    </Routes>
   )
 }
 
