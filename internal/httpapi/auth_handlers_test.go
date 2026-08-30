@@ -203,3 +203,63 @@ func TestHandleLogout_NoSession(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
+
+func TestHandleMe_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetSessionByTokenHashFunc: func(ctx context.Context, h []byte) (db.Session, error) {
+			return db.Session{ID: 42, UserID: 7, TokenHash: h}, nil
+		},
+		TouchSessionLastSeenFunc: func(ctx context.Context, sessionID int64) error { return nil },
+		GetUserByIDFunc: func(ctx context.Context, id int64) (db.User, error) {
+			return db.User{ID: id, Email: "actor@example.edu", FirstName: "Actor", LastName: "Test"}, nil
+		},
+	}
+	s := newTestServer(q)
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieNameForTest, Value: "sometoken"})
+	rec := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[loginResponse](t, rec)
+	if got.User.ID != 7 || got.User.Email != "actor@example.edu" {
+		t.Errorf("User = %+v, want ID=7 Email=actor@example.edu", got.User)
+	}
+}
+
+func TestHandleMe_NoSession(t *testing.T) {
+	s := newTestServer(&dbfake.Querier{})
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	rec := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleMe_UserNotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		GetSessionByTokenHashFunc: func(ctx context.Context, h []byte) (db.Session, error) {
+			return db.Session{ID: 42, UserID: 7, TokenHash: h}, nil
+		},
+		TouchSessionLastSeenFunc: func(ctx context.Context, sessionID int64) error { return nil },
+		GetUserByIDFunc: func(ctx context.Context, id int64) (db.User, error) {
+			return db.User{}, pgx.ErrNoRows
+		},
+	}
+	s := newTestServer(q)
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieNameForTest, Value: "sometoken"})
+	rec := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}

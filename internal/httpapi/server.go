@@ -58,6 +58,7 @@ func (s *Server) Routes() http.Handler {
 		r.Use(s.requireAuth)
 
 		r.Post("/logout", s.handleLogout)
+		r.Get("/me", s.handleMe)
 
 		r.Route("/families", func(r chi.Router) {
 			r.Post("/", s.handleCreateFamily)

@@ -1,3 +1,15 @@
+/* :focus-visible rather than :focus, so the ring only shows for keyboard
+   navigation, not every mouse click -- one shared rule now, rather than
+   relying on each browser's inconsistent default (which also has poor
+   contrast against the blue buttons below), before the CRUD-heavy
+   screens still to come make retrofitting this expensive. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid #154480;
+  outline-offset: 2px;
+}
+
 .login-form {
   max-width: 320px;
   margin: 4rem auto;
@@ -49,11 +61,44 @@
   margin-bottom: 1.5rem;
 }
 
+.app header nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.app-name {
+  font-weight: 600;
+}
+
+.app header nav a {
+  color: #333;
+  text-decoration: none;
+}
+
+.app header nav a.active {
+  color: #2a5db0;
+  font-weight: 600;
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .app header button {
   padding: 0.4rem 0.8rem;
   border: 1px solid #ccc;
   border-radius: 4px;
   background: white;
+}
+
+.loading {
+  max-width: 900px;
+  margin: 4rem auto;
+  text-align: center;
+  color: #666;
 }
 
 .participant-search .tabs {

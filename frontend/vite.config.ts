@@ -11,6 +11,7 @@ const apiPaths = [
   '/healthz',
   '/login',
   '/logout',
+  '/me',
   '/families',
   '/guardians',
   '/children',
@@ -20,6 +21,13 @@ const apiPaths = [
   '/equipment',
   '/experiment-roles',
   '/experiments',
+  '/appointments',
+  '/availability',
+  '/schedule-blockings',
+  '/protocols',
+  '/grants',
+  '/zip-codes',
+  '/newsletters',
 ]
 
 // https://vite.dev/config/

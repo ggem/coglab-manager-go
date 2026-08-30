@@ -87,6 +87,31 @@ func (s *Server) handleLoginFailure(w http.ResponseWriter, r *http.Request, emai
 	writeError(w, http.StatusUnauthorized, "invalid credentials")
 }
 
+// handleMe returns the currently authenticated user -- how the frontend
+// restores session state after a page refresh, since there's otherwise
+// no way to distinguish "not logged in" from "logged in, but the
+// in-memory app state was just lost." Sits behind requireAuth, so an
+// absent/invalid session already gets a 401 from the middleware before
+// this handler ever runs.
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return
+	}
+	user, err := s.queries.GetUserByID(r.Context(), userID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, loginResponse{User: userResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+	}})
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	session, _ := sessionFromContext(r.Context())
 

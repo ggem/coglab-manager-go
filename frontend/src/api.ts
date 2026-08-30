@@ -65,7 +65,7 @@ export interface User {
   last_name: string
 }
 
-interface LoginResponse {
+export interface LoginResponse {
   user: User
 }
 
@@ -78,6 +78,13 @@ export function login(email: string, password: string): Promise<LoginResponse> {
 
 export function logout(): Promise<void> {
   return apiFetch<void>('/logout', { method: 'POST' })
+}
+
+// Restores session state after a page refresh -- 401s (via ApiError) if
+// there's no valid session cookie, which the caller treats the same as
+// "not logged in."
+export function getMe(): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/me')
 }
 
 export interface ChildSearchResult {
