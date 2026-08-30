@@ -16,6 +16,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
+	"github.com/ggem/coglab-manager-go/internal/mcdi/mcdifake"
 )
 
 // sessionCookieNameForTest mirrors the unexported cookie name
@@ -28,7 +29,14 @@ func discardLogger() *slog.Logger {
 }
 
 func newTestServer(q *dbfake.Querier) *Server {
-	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, discardLogger())
+	return newTestServerWithMCDI(q, &mcdifake.Client{})
+}
+
+// newTestServerWithMCDI is newTestServer for the handful of tests that
+// need to control the fake MCDI client's behavior (e.g. configuring it
+// to fail) rather than accepting the default no-op one.
+func newTestServerWithMCDI(q *dbfake.Querier, mcdiClient *mcdifake.Client) *Server {
+	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, mcdiClient, discardLogger())
 }
 
 func postJSON(t *testing.T, s *Server, path string, body any) *httptest.ResponseRecorder {

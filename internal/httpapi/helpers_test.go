@@ -11,12 +11,27 @@ import (
 
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
+	"github.com/ggem/coglab-manager-go/internal/mcdi/mcdifake"
 )
 
 // newAuthenticatedTestServer wires up q with a valid session for userID
 // (unless the test already set its own session stubs) and returns a
 // server plus the cookie a request needs to authenticate as that user.
 func newAuthenticatedTestServer(q *dbfake.Querier, userID int64) (*Server, *http.Cookie) {
+	cookie := stubAuthenticatedSession(q, userID)
+	return newTestServer(q), cookie
+}
+
+// newAuthenticatedTestServerWithMCDI is newAuthenticatedTestServer for
+// the handful of tests that need to control the fake MCDI client's
+// behavior (e.g. configuring it to fail) rather than accepting the
+// default no-op one.
+func newAuthenticatedTestServerWithMCDI(q *dbfake.Querier, userID int64, mcdiClient *mcdifake.Client) (*Server, *http.Cookie) {
+	cookie := stubAuthenticatedSession(q, userID)
+	return newTestServerWithMCDI(q, mcdiClient), cookie
+}
+
+func stubAuthenticatedSession(q *dbfake.Querier, userID int64) *http.Cookie {
 	if q.GetSessionByTokenHashFunc == nil {
 		q.GetSessionByTokenHashFunc = func(ctx context.Context, tokenHash []byte) (db.Session, error) {
 			return db.Session{ID: 1, UserID: userID}, nil
@@ -30,9 +45,7 @@ func newAuthenticatedTestServer(q *dbfake.Querier, userID int64) (*Server, *http
 			return db.LabMembership{UserID: arg.UserID, LabID: arg.LabID}, nil
 		}
 	}
-	s := newTestServer(q)
-	cookie := &http.Cookie{Name: sessionCookieNameForTest, Value: "test-token"}
-	return s, cookie
+	return &http.Cookie{Name: sessionCookieNameForTest, Value: "test-token"}
 }
 
 // doRequest performs an HTTP request against s.Routes(), optionally with a
