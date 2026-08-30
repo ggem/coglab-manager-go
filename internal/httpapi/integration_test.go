@@ -10,6 +10,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -733,6 +734,353 @@ func TestMatchingFlow_Integration(t *testing.T) {
 
 func ptrFloat(f float64) *float64 { return &f }
 func ptrBool(b bool) *bool        { return &b }
+
+// fastForwardToPending bypasses the M5 search/schedule flow (out of
+// scope for a reporting test) by writing schedule_date/time and status
+// directly, so handleArriveAppointment has a 'pending' row to transition
+// -- the arrive endpoint itself is exercised for real; only getting to
+// "scheduled" is short-circuited.
+func fastForwardToPending(ctx context.Context, t *testing.T, appointmentID int64, date time.Time) {
+	t.Helper()
+	if _, err := testPool.Exec(ctx,
+		"update appointments set schedule_date = $1, schedule_time_start = '09:00', schedule_time_end = '09:30', status = 'pending' where id = $2",
+		date, appointmentID); err != nil {
+		t.Fatalf("fast-forward appointment %d to pending: %v", appointmentID, err)
+	}
+}
+
+func TestReportingFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Reporting Test Lab", fmt.Sprintf("rtl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("reporting-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("reporting-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	// A zip unique to this test run: ZipCodesReport is deliberately not
+	// lab-scoped for its child counts (children aren't lab-scoped data),
+	// so a fixed zip shared with another integration test's families
+	// (e.g. TestMatchingFlow_Integration also uses Boulder addresses)
+	// would inflate this test's count with unrelated children.
+	testZip := fmt.Sprintf("%05d", time.Now().UnixNano()%100000)
+
+	var protocol protocolResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/protocols/", labID), protocolRequest{Name: "IRB-2026-001"}), &protocol)
+	var grant grantResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/grants/", labID), grantRequest{Name: "NIH R01 Test Grant"}), &grant)
+	var zipCode zipCodeResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/zip-codes/", labID), zipCodeRequest{ZipCode: testZip, Priority: "high"}), &zipCode)
+
+	minAge, maxAge := 0.0, 240.0
+	var experiment experimentResponse
+	experimentRec := do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Reporting Integration Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: &minAge, AgeRangeMaxMonths: &maxAge, ProtocolID: &protocol.ID,
+	})
+	if experimentRec.Code != http.StatusCreated {
+		t.Fatalf("create experiment status = %d, want %d; body = %s", experimentRec.Code, http.StatusCreated, experimentRec.Body)
+	}
+	decode(experimentRec, &experiment)
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/grants/", experiment.ID), addGrantRequest{GrantID: grant.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add experiment grant status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	var family familyResponse
+	decode(do(http.MethodPost, "/families/", familyRequest{Address: "1 Main St", City: "Boulder", State: "CO", Zip: testZip}), &family)
+
+	// Child A: white, female. Child B: white + asian, male -- picked to
+	// prove NIH's per-category counting (both count toward "white") vs.
+	// its distinct-child totals (male=1, female=1, not summed from the
+	// category rows).
+	var childA, childB childResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "ChildA", LastName: "Test", Sex: "female", Response: "unknown",
+		BirthDate: ptrDateYearsAgo(2), RaceEthnicity: []string{"white"},
+	}), &childA)
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "ChildB", LastName: "Test", Sex: "male", Response: "unknown",
+		BirthDate: ptrDateYearsAgo(3), RaceEthnicity: []string{"white", "asian"},
+	}), &childB)
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	windowStart, windowEnd := today.AddDate(0, 0, -1).Format(dateLayout), today.AddDate(0, 0, 1).Format(dateLayout)
+
+	var apptA, apptB appointmentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{ChildID: childA.ID}), &apptA)
+	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{ChildID: childB.ID}), &apptB)
+	fastForwardToPending(ctx, t, apptA.ID, today)
+	fastForwardToPending(ctx, t, apptB.ID, today)
+	for _, id := range []int64{apptA.ID, apptB.ID} {
+		if rec := do(http.MethodPost, fmt.Sprintf("/appointments/%d/arrive", id), nil); rec.Code != http.StatusOK {
+			t.Fatalf("arrive appointment %d status = %d, want %d; body = %s", id, rec.Code, http.StatusOK, rec.Body)
+		}
+	}
+
+	// NIH: white has both children (1 male, 1 female); asian has only
+	// ChildB (1 male). Totals must be distinct-child (1 male, 1 female),
+	// not a sum across categories.
+	var nih nihReportResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/reports/nih?start_date=%s&end_date=%s&grant_id=%d", labID, windowStart, windowEnd, grant.ID), nil), &nih)
+	byCategory := map[string]nihReportCategoryRow{}
+	for _, c := range nih.Categories {
+		byCategory[c.Category] = c
+	}
+	if white := byCategory["white"]; white.Male != 1 || white.Female != 1 {
+		t.Errorf("NIH white row = %+v, want male=1 female=1", white)
+	}
+	if asian := byCategory["asian"]; asian.Male != 1 || asian.Female != 0 {
+		t.Errorf("NIH asian row = %+v, want male=1 female=0", asian)
+	}
+	if nih.Totals.Male != 1 || nih.Totals.Female != 1 {
+		t.Errorf("NIH totals = %+v, want male=1 female=1 (distinct children, not summed)", nih.Totals)
+	}
+
+	// HRC: both appointments are under our one protocol.
+	var hrc hrcReportResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/reports/hrc?start_date=%s&end_date=%s", labID, windowStart, windowEnd), nil), &hrc)
+	if hrc.Total != 2 {
+		t.Errorf("HRC total = %d, want 2", hrc.Total)
+	}
+	var ourProtocolRow *hrcReportProtocolRow
+	for i, p := range hrc.Protocols {
+		if p.ProtocolID != nil && *p.ProtocolID == protocol.ID {
+			ourProtocolRow = &hrc.Protocols[i]
+		}
+	}
+	if ourProtocolRow == nil || ourProtocolRow.ChildCount != 2 {
+		t.Errorf("HRC row for protocol %d = %+v, want child_count=2", protocol.ID, ourProtocolRow)
+	}
+
+	// Demographics: per-experiment, both children arrived in window.
+	var demographics demographicsReportResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/experiments/%d/reports/demographics?start_date=%s&end_date=%s", experiment.ID, windowStart, windowEnd), nil), &demographics)
+	if demographics.Summary.Count != 2 {
+		t.Fatalf("demographics summary count = %d, want 2; full = %+v", demographics.Summary.Count, demographics)
+	}
+	if demographics.Summary.BySex["male"] != 1 || demographics.Summary.BySex["female"] != 1 {
+		t.Errorf("demographics by_sex = %+v, want male=1 female=1", demographics.Summary.BySex)
+	}
+	if demographics.Summary.ByRaceEthnicity["white"] != 2 || demographics.Summary.ByRaceEthnicity["asian"] != 1 {
+		t.Errorf("demographics by_race_ethnicity = %+v, want white=2 asian=1", demographics.Summary.ByRaceEthnicity)
+	}
+	if demographics.Summary.AgeMonthsMin <= 0 || demographics.Summary.AgeMonthsMax <= demographics.Summary.AgeMonthsMin {
+		t.Errorf("demographics age summary = min %v max %v, want a real spread (children are 2 and 3 years old)",
+			demographics.Summary.AgeMonthsMin, demographics.Summary.AgeMonthsMax)
+	}
+
+	// Zip codes: both children share family 1's zip, which has a
+	// configured priority.
+	var zipReport []zipCodesReportRow
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/reports/zip-codes", labID), nil), &zipReport)
+	var ourZipRow *zipCodesReportRow
+	for i, z := range zipReport {
+		if z.Zip == testZip {
+			ourZipRow = &zipReport[i]
+		}
+	}
+	if ourZipRow == nil || ourZipRow.ChildCount != 2 || ourZipRow.Priority == nil || *ourZipRow.Priority != "high" {
+		t.Fatalf("zip codes row for %s = %+v, want child_count=2 priority=high", testZip, ourZipRow)
+	}
+}
+
+func ptrDateYearsAgo(years int) *string {
+	s := time.Now().UTC().AddDate(-years, 0, 0).Format(dateLayout)
+	return &s
+}
+
+func TestNewsletterExportFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Newsletter Test Lab", fmt.Sprintf("ntl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("newsletter-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("newsletter-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	minAge, maxAge := 0.0, 240.0
+	var experiment experimentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Newsletter Integration Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: &minAge, AgeRangeMaxMonths: &maxAge,
+	}), &experiment)
+
+	var family familyResponse
+	decode(do(http.MethodPost, "/families/", familyRequest{Address: "42 Elm St", City: "Boulder", State: "CO", Zip: "80302"}), &family)
+	var guardian guardianResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/guardians/", family.ID), guardianRequest{
+		FirstName: "Parent", LastName: "One", Education: "unknown",
+	}), &guardian)
+	var child childResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "Kid", LastName: "Test", Sex: "unknown", Response: "unknown",
+	}), &child)
+
+	var appointment appointmentResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{ChildID: child.ID}), &appointment)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	fastForwardToPending(ctx, t, appointment.ID, today)
+	if rec := do(http.MethodPost, fmt.Sprintf("/appointments/%d/arrive", appointment.ID), nil); rec.Code != http.StatusOK {
+		t.Fatalf("arrive appointment status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+
+	var newsletter newsletterResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/newsletters/", labID), newsletterRequest{Name: "Fall Update"}), &newsletter)
+
+	windowStart, windowEnd := today.AddDate(0, 0, -1).Format(dateLayout), today.AddDate(0, 0, 1).Format(dateLayout)
+
+	// Export without a newsletter filter: the family is eligible.
+	exportRec := do(http.MethodGet, fmt.Sprintf("/labs/%d/newsletters/export?start_date=%s&end_date=%s", labID, windowStart, windowEnd), nil)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("export status = %d, want %d; body = %s", exportRec.Code, http.StatusOK, exportRec.Body)
+	}
+	if ct := exportRec.Header().Get("Content-Type"); ct != "text/csv" {
+		t.Errorf("Content-Type = %q, want %q", ct, "text/csv")
+	}
+	rows, err := csv.NewReader(exportRec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse export CSV: %v", err)
+	}
+	if len(rows) != 1 || rows[0][0] != "Parent" || rows[0][1] != "One" || rows[0][2] != "42 Elm St" || rows[0][5] != "80302" {
+		t.Fatalf("export rows = %+v, want one row for Parent One at 42 Elm St / 80302", rows)
+	}
+
+	// Mark sent for this newsletter, then confirm a second export
+	// (filtered to the same newsletter) excludes the now-marked family.
+	markRec := do(http.MethodPost, fmt.Sprintf("/newsletters/%d/mark-sent?start_date=%s&end_date=%s", newsletter.ID, windowStart, windowEnd), nil)
+	if markRec.Code != http.StatusOK {
+		t.Fatalf("mark-sent status = %d, want %d; body = %s", markRec.Code, http.StatusOK, markRec.Body)
+	}
+	var markResult map[string]int
+	decode(markRec, &markResult)
+	if markResult["marked_sent"] != 1 {
+		t.Errorf("marked_sent = %d, want 1", markResult["marked_sent"])
+	}
+
+	exportAfterMarkRec := do(http.MethodGet, fmt.Sprintf("/labs/%d/newsletters/export?start_date=%s&end_date=%s&newsletter_id=%d", labID, windowStart, windowEnd, newsletter.ID), nil)
+	rowsAfterMark, err := csv.NewReader(exportAfterMarkRec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse post-mark export CSV: %v", err)
+	}
+	if len(rowsAfterMark) != 0 {
+		t.Fatalf("post-mark-sent export (filtered to this newsletter) = %+v, want no rows", rowsAfterMark)
+	}
+
+	// An export with no newsletter filter still sees the family --
+	// mark-sent only excludes future exports scoped to that newsletter.
+	exportNoFilterRec := do(http.MethodGet, fmt.Sprintf("/labs/%d/newsletters/export?start_date=%s&end_date=%s", labID, windowStart, windowEnd), nil)
+	rowsNoFilter, err := csv.NewReader(exportNoFilterRec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse unfiltered export CSV: %v", err)
+	}
+	if len(rowsNoFilter) != 1 {
+		t.Fatalf("unfiltered export after mark-sent = %+v, want still 1 row (no newsletter_id filter applied)", rowsNoFilter)
+	}
+}
 
 func auditEventsForUser(ctx context.Context, userID int64) ([]string, error) {
 	rows, err := testPool.Query(ctx, "select action from audit_events where actor_user_id = $1 order by id", userID)

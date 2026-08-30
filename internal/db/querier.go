@@ -14,8 +14,14 @@ type Querier interface {
 	// callers get full rows (name, etc.) in one query instead of N+1 lookups.
 	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error
 	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error
+	AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) error
 	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error
 	AddLabMemberTraining(ctx context.Context, arg AddLabMemberTrainingParams) error
+	// Only a scheduled ('pending') appointment can arrive -- an unscheduled
+	// one has no date/time for a visit to have happened at. Frees the hold,
+	// same as ReleaseAppointment, since 'arrived' also falls outside
+	// appointments_one_active_hold_per_child's predicate.
+	ArriveAppointment(ctx context.Context, id int64) (Appointment, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
 	CreateAppointmentExperimenter(ctx context.Context, arg CreateAppointmentExperimenterParams) (AppointmentExperimenter, error)
 	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
@@ -26,24 +32,37 @@ type Querier interface {
 	CreateExperiment(ctx context.Context, arg CreateExperimentParams) (Experiment, error)
 	CreateExperimentRole(ctx context.Context, arg CreateExperimentRoleParams) (ExperimentRole, error)
 	CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error)
+	CreateGrant(ctx context.Context, arg CreateGrantParams) (Grant, error)
 	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
 	CreateLabAvailabilityGeneral(ctx context.Context, arg CreateLabAvailabilityGeneralParams) (LabAvailabilityGeneral, error)
 	CreateLabAvailabilitySpecific(ctx context.Context, arg CreateLabAvailabilitySpecificParams) (LabAvailabilitySpecific, error)
+	CreateNewsletter(ctx context.Context, arg CreateNewsletterParams) (Newsletter, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
+	CreateProtocol(ctx context.Context, arg CreateProtocolParams) (Protocol, error)
 	CreateRecruitmentSource(ctx context.Context, name string) (RecruitmentSource, error)
 	CreateScheduleBlocking(ctx context.Context, arg CreateScheduleBlockingParams) (ScheduleBlocking, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateZipCode(ctx context.Context, arg CreateZipCodeParams) (Zipcode, error)
 	DeactivateChild(ctx context.Context, arg DeactivateChildParams) error
 	DeactivateCondition(ctx context.Context, id int64) error
 	DeactivateConditionValue(ctx context.Context, id int64) error
 	DeactivateEquipment(ctx context.Context, id int64) error
 	DeactivateExperiment(ctx context.Context, id int64) error
 	DeactivateExperimentRole(ctx context.Context, id int64) error
+	DeactivateGrant(ctx context.Context, id int64) error
 	DeactivateLabAvailabilityGeneral(ctx context.Context, id int64) error
 	DeactivateLabAvailabilitySpecific(ctx context.Context, id int64) error
+	DeactivateNewsletter(ctx context.Context, id int64) error
+	DeactivateProtocol(ctx context.Context, id int64) error
 	DeactivateScheduleBlocking(ctx context.Context, id int64) error
+	DeactivateZipCode(ctx context.Context, id int64) error
 	DeleteGuardian(ctx context.Context, id int64) error
+	// Per-child listing of 'arrived' appointments for one experiment in a
+	// date range, with age at the appointment (in months) and the family's
+	// first (lowest-id) guardian's education level. Handler computes summary
+	// counts over these rows in Go rather than a second query.
+	DemographicsReport(ctx context.Context, arg DemographicsReportParams) ([]DemographicsReportRow, error)
 	GetAppointmentByID(ctx context.Context, id int64) (Appointment, error)
 	// For lab-membership authorization (mirrors GetConditionValueLabID):
 	// appointments has no lab_id of its own, so resolve it via the experiment.
@@ -58,15 +77,25 @@ type Querier interface {
 	GetExperimentByID(ctx context.Context, id int64) (Experiment, error)
 	GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
+	GetGrantByID(ctx context.Context, id int64) (Grant, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
 	GetLabAvailabilityGeneralByID(ctx context.Context, id int64) (LabAvailabilityGeneral, error)
 	GetLabAvailabilitySpecificByID(ctx context.Context, id int64) (LabAvailabilitySpecific, error)
 	GetLabMembership(ctx context.Context, arg GetLabMembershipParams) (LabMembership, error)
+	GetNewsletterByID(ctx context.Context, id int64) (Newsletter, error)
+	GetProtocolByID(ctx context.Context, id int64) (Protocol, error)
 	GetScheduleBlockingByID(ctx context.Context, id int64) (ScheduleBlocking, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSitterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	GetZipCodeByID(ctx context.Context, id int64) (Zipcode, error)
+	// Distinct-child 'arrived' counts per protocol in a date range, for the
+	// lab's Human Research Committee (IRB) reporting.
+	HRCReportByProtocol(ctx context.Context, arg HRCReportByProtocolParams) ([]HRCReportByProtocolRow, error)
+	// All-protocols total for the same window, lab-wide (including
+	// experiments with no protocol assigned).
+	HRCReportTotal(ctx context.Context, arg HRCReportTotalParams) (int64, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error)
 	ListAppointmentsByExperiment(ctx context.Context, arg ListAppointmentsByExperimentParams) ([]Appointment, error)
@@ -101,12 +130,22 @@ type Querier interface {
 	// No ORDER BY/LIMIT: sort mode (oldest-first vs. random) and the
 	// requested count are applied by the caller in Go.
 	ListEligibleChildrenForExperiment(ctx context.Context, arg ListEligibleChildrenForExperimentParams) ([]Child, error)
+	// One row per family with an 'arrived' appointment for this lab in the
+	// window, represented by its lowest-id guardian (matching legacy's
+	// single-guardian-per-row mail-merge shape). When newsletter_id is
+	// given, excludes a (family, guardian) pairing already marked sent for
+	// that newsletter -- note this can fall through to a different
+	// (higher-id) guardian in the same family if the lowest-id one already
+	// received it, rather than dropping the family outright.
+	ListEligibleFamiliesForNewsletter(ctx context.Context, arg ListEligibleFamiliesForNewsletterParams) ([]ListEligibleFamiliesForNewsletterRow, error)
 	ListEquipmentByLab(ctx context.Context, labID int64) ([]Equipment, error)
 	ListExperimentConditions(ctx context.Context, experimentID int64) ([]Condition, error)
 	ListExperimentEquipment(ctx context.Context, experimentID int64) ([]Equipment, error)
+	ListExperimentGrants(ctx context.Context, experimentID int64) ([]Grant, error)
 	ListExperimentRolesByLab(ctx context.Context, labID int64) ([]ExperimentRole, error)
 	ListExperimentTrainingRequirements(ctx context.Context, experimentID int64) ([]ExperimentRole, error)
 	ListExperimentsByLab(ctx context.Context, labID int64) ([]Experiment, error)
+	ListGrantsByLab(ctx context.Context, labID int64) ([]Grant, error)
 	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
 	// Every active member's general availability windows in a lab, for every
 	// weekday at once: general availability doesn't vary by date (it's a
@@ -125,11 +164,28 @@ type Querier interface {
 	// the scheduling search's backtracking draws from for that role.
 	ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]User, error)
 	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
+	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
+	ListProtocolsByLab(ctx context.Context, labID int64) ([]Protocol, error)
 	ListScheduleBlockingsByLab(ctx context.Context, labID int64) ([]ScheduleBlocking, error)
 	// One query for a whole multi-day search range, rather than one call per
 	// candidate day -- the caller groups rows by date in Go.
 	ListScheduleBlockingsForDateRange(ctx context.Context, arg ListScheduleBlockingsForDateRangeParams) ([]ScheduleBlocking, error)
+	ListZipCodesByLab(ctx context.Context, labID int64) ([]Zipcode, error)
+	MarkNewsletterSent(ctx context.Context, arg MarkNewsletterSentParams) error
+	// Per-race_ethnicity-category enrollment counts, cross-tabbed by sex, over
+	// 'arrived' appointments in a date range -- the current-shape NIH PHS
+	// Inclusion Enrollment Report (built against the merged race_ethnicity[]
+	// column, not legacy's old separate ethnicity/race/other_race split). A
+	// child selecting more than one category is counted in each -- this is
+	// per-category, not mutually exclusive, so rows don't sum to the total
+	// (see NIHReportTotals for that).
+	NIHReportByCategory(ctx context.Context, arg NIHReportByCategoryParams) ([]NIHReportByCategoryRow, error)
+	// Distinct-child totals by sex, same filters as NIHReportByCategory --
+	// a naive sum of the per-category rows would double-count a child who
+	// selected more than one race_ethnicity category, so this is computed
+	// separately rather than derived from the category rows.
+	NIHReportTotals(ctx context.Context, arg NIHReportTotalsParams) (NIHReportTotalsRow, error)
 	// Deliberately allows releasing a 'pending' (already time-scheduled)
 	// appointment, not just an unscheduled one -- matches legacy's per-child
 	// release, which does the same. Frees the child up again: 'released'
@@ -137,6 +193,7 @@ type Querier interface {
 	ReleaseAppointment(ctx context.Context, id int64) (Appointment, error)
 	RemoveExperimentCondition(ctx context.Context, arg RemoveExperimentConditionParams) error
 	RemoveExperimentEquipment(ctx context.Context, arg RemoveExperimentEquipmentParams) error
+	RemoveExperimentGrant(ctx context.Context, arg RemoveExperimentGrantParams) error
 	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error
 	RemoveLabMemberTraining(ctx context.Context, arg RemoveLabMemberTrainingParams) error
 	RevokeSession(ctx context.Context, tokenHash []byte) error
@@ -186,7 +243,16 @@ type Querier interface {
 	UpdateExperiment(ctx context.Context, arg UpdateExperimentParams) (Experiment, error)
 	UpdateExperimentRole(ctx context.Context, arg UpdateExperimentRoleParams) (ExperimentRole, error)
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
+	UpdateGrant(ctx context.Context, arg UpdateGrantParams) (Grant, error)
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
+	UpdateProtocol(ctx context.Context, arg UpdateProtocolParams) (Protocol, error)
+	UpdateZipCode(ctx context.Context, arg UpdateZipCodeParams) (Zipcode, error)
+	// Child counts by mailing zip code, optionally filtered by recruitment
+	// source, annotated with the lab's recruiting-priority tier for that zip
+	// when one is configured. Child counts are computed globally (children
+	// aren't lab-scoped -- the established shared-participant-pool design);
+	// only the priority annotation comes from this lab's zipcodes lookup.
+	ZipCodesReport(ctx context.Context, arg ZipCodesReportParams) ([]ZipCodesReportRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

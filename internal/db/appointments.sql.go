@@ -11,6 +11,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const arriveAppointment = `-- name: ArriveAppointment :one
+update appointments
+set status = 'arrived'
+where id = $1 and status = 'pending'
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at
+`
+
+// Only a scheduled ('pending') appointment can arrive -- an unscheduled
+// one has no date/time for a visit to have happened at. Frees the hold,
+// same as ReleaseAppointment, since 'arrived' also falls outside
+// appointments_one_active_hold_per_child's predicate.
+func (q *Queries) ArriveAppointment(ctx context.Context, id int64) (Appointment, error) {
+	row := q.db.QueryRow(ctx, arriveAppointment, id)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.ExperimentID,
+		&i.ChildID,
+		&i.Session,
+		&i.AgeRangeMinMonths,
+		&i.AgeRangeMaxMonths,
+		&i.SiblingComing,
+		&i.ScheduleDate,
+		&i.ScheduleTimeStart,
+		&i.ScheduleTimeEnd,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createAppointment = `-- name: CreateAppointment :one
 insert into appointments (experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming)
 values (

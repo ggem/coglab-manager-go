@@ -2,7 +2,7 @@
 insert into experiments (
     lab_id, name, description, sessions, age_range_min_months, age_range_max_months,
     start_date, end_date, status, duration_minutes, filter_premies,
-    filter_min_languages, filter_languages
+    filter_min_languages, filter_languages, protocol_id
 ) values (
     sqlc.arg(lab_id),
     sqlc.arg(name),
@@ -16,7 +16,8 @@ insert into experiments (
     sqlc.arg(duration_minutes),
     sqlc.arg(filter_premies),
     sqlc.arg(filter_min_languages),
-    sqlc.arg(filter_languages)
+    sqlc.arg(filter_languages),
+    sqlc.narg(protocol_id)
 )
 returning *;
 
@@ -39,7 +40,8 @@ update experiments set
     duration_minutes = sqlc.arg(duration_minutes),
     filter_premies = sqlc.arg(filter_premies),
     filter_min_languages = sqlc.arg(filter_min_languages),
-    filter_languages = sqlc.arg(filter_languages)
+    filter_languages = sqlc.arg(filter_languages),
+    protocol_id = sqlc.narg(protocol_id)
 where id = sqlc.arg(id)
 returning *;
 
@@ -92,3 +94,17 @@ join experiment_training_requirements
     on experiment_training_requirements.experiment_role_id = experiment_roles.id
 where experiment_training_requirements.experiment_id = sqlc.arg(experiment_id)
 order by experiment_roles.id;
+
+-- name: AddExperimentGrant :exec
+insert into experiment_grants (experiment_id, grant_id)
+values (sqlc.arg(experiment_id), sqlc.arg(grant_id));
+
+-- name: RemoveExperimentGrant :exec
+delete from experiment_grants
+where experiment_id = sqlc.arg(experiment_id) and grant_id = sqlc.arg(grant_id);
+
+-- name: ListExperimentGrants :many
+select grants.* from grants
+join experiment_grants on experiment_grants.grant_id = grants.id
+where experiment_grants.experiment_id = sqlc.arg(experiment_id)
+order by grants.id;

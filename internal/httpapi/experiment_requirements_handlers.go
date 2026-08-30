@@ -14,6 +14,8 @@ const (
 	ActionExperimentEquipmentRemoved           = "experiment_equipment.removed"
 	ActionExperimentTrainingRequirementAdded   = "experiment_training_requirement.added"
 	ActionExperimentTrainingRequirementRemoved = "experiment_training_requirement.removed"
+	ActionExperimentGrantAdded                 = "experiment_grant.added"
+	ActionExperimentGrantRemoved               = "experiment_grant.removed"
 )
 
 type addConditionRequest struct {
@@ -261,6 +263,89 @@ func (s *Server) handleListExperimentTrainingRequirements(w http.ResponseWriter,
 	resp := make([]experimentRoleResponse, len(roles))
 	for i, role := range roles {
 		resp[i] = experimentRoleToResponse(role)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+type addGrantRequest struct {
+	GrantID int64 `json:"grant_id"`
+}
+
+func (s *Server) handleAddExperimentGrant(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+
+	var req addGrantRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := s.queries.AddExperimentGrant(r.Context(), db.AddExperimentGrantParams{
+		ExperimentID: experimentID,
+		GrantID:      req.GrantID,
+	}); err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionExperimentGrantAdded,
+		EntityType:  ptr("experiment"),
+		EntityID:    &experimentID,
+		Metadata:    map[string]int64{"grant_id": req.GrantID},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRemoveExperimentGrant(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+	grantID, ok := idParam(w, r, "grantID")
+	if !ok {
+		return
+	}
+
+	if err := s.queries.RemoveExperimentGrant(r.Context(), db.RemoveExperimentGrantParams{
+		ExperimentID: experimentID,
+		GrantID:      grantID,
+	}); err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionExperimentGrantRemoved,
+		EntityType:  ptr("experiment"),
+		EntityID:    &experimentID,
+		Metadata:    map[string]int64{"grant_id": grantID},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListExperimentGrants(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+
+	grants, err := s.queries.ListExperimentGrants(r.Context(), experimentID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]grantResponse, len(grants))
+	for i, g := range grants {
+		resp[i] = grantToResponse(g)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

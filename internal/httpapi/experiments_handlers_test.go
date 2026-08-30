@@ -264,6 +264,43 @@ func TestHandleUpdateExperiment_Success(t *testing.T) {
 	}
 }
 
+// TestHandleUpdateExperiment_ProtocolIDRoundTrips confirms protocol_id (a
+// plain nullable FK, not a join-table endpoint like conditions/equipment)
+// isn't silently dropped between the request, CreateExperiment/
+// UpdateExperiment params, and the response.
+func TestHandleUpdateExperiment_ProtocolIDRoundTrips(t *testing.T) {
+	var captured db.UpdateExperimentParams
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		UpdateExperimentFunc: func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
+			captured = arg
+			return db.Experiment{ID: arg.ID, Name: arg.Name, Status: arg.Status, ProtocolID: arg.ProtocolID}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	protocolID := int64(5)
+	rec := doRequest(t, s, http.MethodPut, "/experiments/3/", cookie, experimentRequest{
+		Name: "Renamed Study", Status: "pilot", ProtocolID: &protocolID,
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if captured.ProtocolID == nil || *captured.ProtocolID != protocolID {
+		t.Errorf("UpdateExperiment ProtocolID = %v, want %d", captured.ProtocolID, protocolID)
+	}
+	got := decodeBody[experimentResponse](t, rec)
+	if got.ProtocolID == nil || *got.ProtocolID != protocolID {
+		t.Errorf("response ProtocolID = %v, want %d", got.ProtocolID, protocolID)
+	}
+}
+
 func TestHandleDeactivateExperiment_InvalidID(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
 

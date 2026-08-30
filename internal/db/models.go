@@ -119,6 +119,7 @@ type Experiment struct {
 	DeactivatedAt      pgtype.Timestamptz `json:"deactivated_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ProtocolID         *int64             `json:"protocol_id"`
 }
 
 type ExperimentCondition struct {
@@ -129,6 +130,11 @@ type ExperimentCondition struct {
 type ExperimentEquipmentRequirement struct {
 	ExperimentID int64 `json:"experiment_id"`
 	EquipmentID  int64 `json:"equipment_id"`
+}
+
+type ExperimentGrant struct {
+	ExperimentID int64 `json:"experiment_id"`
+	GrantID      int64 `json:"grant_id"`
 }
 
 type ExperimentRole struct {
@@ -155,6 +161,15 @@ type Family struct {
 	PreferredContactMethod *string            `json:"preferred_contact_method"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Grant struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Guardian struct {
@@ -217,6 +232,21 @@ type LabMembership struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Newsletter struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type NewslettersParent struct {
+	NewsletterID int64              `json:"newsletter_id"`
+	GuardianID   int64              `json:"guardian_id"`
+	SentAt       pgtype.Timestamptz `json:"sent_at"`
+}
+
 type Note struct {
 	ID           int64              `json:"id"`
 	EntityType   string             `json:"entity_type"`
@@ -224,6 +254,15 @@ type Note struct {
 	AuthorUserID int64              `json:"author_user_id"`
 	Body         string             `json:"body"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Protocol struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RecruitmentSource struct {
@@ -274,4 +313,14 @@ type User struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	DeactivatedAt   pgtype.Timestamptz `json:"deactivated_at"`
+}
+
+type Zipcode struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	ZipCode       string             `json:"zip_code"`
+	Priority      string             `json:"priority"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
