@@ -116,3 +116,179 @@ export function searchFamilies(query: string): Promise<FamilySearchResult[]> {
   if (query) params.set('q', query)
   return apiFetch<FamilySearchResult[]>(`/families/search?${params.toString()}`)
 }
+
+// --- Labs ---
+
+export interface Lab {
+  id: number
+  name: string
+  short_name: string
+}
+
+// The labs the current user belongs to -- the starting point for
+// everything lab-scoped below, since nothing else lists lab IDs.
+export function getLabs(): Promise<Lab[]> {
+  return apiFetch<Lab[]>('/labs')
+}
+
+// --- Lab setup: conditions, equipment, experiment roles, protocols,
+// grants, zip codes. All six share the same create/list/update/
+// deactivate shape (LookupTable.tsx is the shared UI for it); the
+// functions below are still written out individually rather than
+// generated, matching this file's own stated preference for explicit
+// code over codegen magic.
+
+export interface LookupRow {
+  id: number
+  lab_id: number
+  deactivated: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Condition extends LookupRow {
+  name: string
+}
+
+export function listConditions(labId: number): Promise<Condition[]> {
+  return apiFetch<Condition[]>(`/labs/${labId}/conditions/`)
+}
+export function createCondition(labId: number, name: string): Promise<Condition> {
+  return apiFetch<Condition>(`/labs/${labId}/conditions/`, { method: 'POST', body: JSON.stringify({ name }) })
+}
+export function updateCondition(id: number, name: string): Promise<Condition> {
+  return apiFetch<Condition>(`/conditions/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateCondition(id: number): Promise<void> {
+  return apiFetch<void>(`/conditions/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface ConditionValue extends LookupRow {
+  condition_id: number
+  name: string
+}
+
+export function listConditionValues(conditionId: number): Promise<ConditionValue[]> {
+  return apiFetch<ConditionValue[]>(`/conditions/${conditionId}/values/`)
+}
+export function createConditionValue(conditionId: number, name: string): Promise<ConditionValue> {
+  return apiFetch<ConditionValue>(`/conditions/${conditionId}/values/`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+export function updateConditionValue(id: number, name: string): Promise<ConditionValue> {
+  return apiFetch<ConditionValue>(`/condition-values/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateConditionValue(id: number): Promise<void> {
+  return apiFetch<void>(`/condition-values/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface Equipment extends LookupRow {
+  name: string
+  quantity: number
+}
+
+export function listEquipment(labId: number): Promise<Equipment[]> {
+  return apiFetch<Equipment[]>(`/labs/${labId}/equipment/`)
+}
+export function createEquipment(labId: number, name: string, quantity: number): Promise<Equipment> {
+  return apiFetch<Equipment>(`/labs/${labId}/equipment/`, {
+    method: 'POST',
+    body: JSON.stringify({ name, quantity }),
+  })
+}
+export function updateEquipment(id: number, name: string, quantity: number): Promise<Equipment> {
+  return apiFetch<Equipment>(`/equipment/${id}/`, { method: 'PUT', body: JSON.stringify({ name, quantity }) })
+}
+export function deactivateEquipment(id: number): Promise<void> {
+  return apiFetch<void>(`/equipment/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface ExperimentRole extends LookupRow {
+  name: string
+  is_sitter_role: boolean
+}
+
+export function listExperimentRoles(labId: number): Promise<ExperimentRole[]> {
+  return apiFetch<ExperimentRole[]>(`/labs/${labId}/experiment-roles/`)
+}
+export function createExperimentRole(labId: number, name: string): Promise<ExperimentRole> {
+  return apiFetch<ExperimentRole>(`/labs/${labId}/experiment-roles/`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+export function updateExperimentRole(id: number, name: string): Promise<ExperimentRole> {
+  return apiFetch<ExperimentRole>(`/experiment-roles/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateExperimentRole(id: number): Promise<void> {
+  return apiFetch<void>(`/experiment-roles/${id}/deactivate`, { method: 'POST' })
+}
+// A dedicated action, not part of the regular update -- at most one role
+// per lab can be the sitter role (enforced server-side), so setting it
+// is a designation, not just editing a field.
+export function setExperimentRoleSitter(id: number, isSitterRole: boolean): Promise<ExperimentRole> {
+  return apiFetch<ExperimentRole>(`/experiment-roles/${id}/set-sitter`, {
+    method: 'POST',
+    body: JSON.stringify({ is_sitter_role: isSitterRole }),
+  })
+}
+
+export interface Protocol extends LookupRow {
+  name: string
+}
+
+export function listProtocols(labId: number): Promise<Protocol[]> {
+  return apiFetch<Protocol[]>(`/labs/${labId}/protocols/`)
+}
+export function createProtocol(labId: number, name: string): Promise<Protocol> {
+  return apiFetch<Protocol>(`/labs/${labId}/protocols/`, { method: 'POST', body: JSON.stringify({ name }) })
+}
+export function updateProtocol(id: number, name: string): Promise<Protocol> {
+  return apiFetch<Protocol>(`/protocols/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateProtocol(id: number): Promise<void> {
+  return apiFetch<void>(`/protocols/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface Grant extends LookupRow {
+  name: string
+}
+
+export function listGrants(labId: number): Promise<Grant[]> {
+  return apiFetch<Grant[]>(`/labs/${labId}/grants/`)
+}
+export function createGrant(labId: number, name: string): Promise<Grant> {
+  return apiFetch<Grant>(`/labs/${labId}/grants/`, { method: 'POST', body: JSON.stringify({ name }) })
+}
+export function updateGrant(id: number, name: string): Promise<Grant> {
+  return apiFetch<Grant>(`/grants/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateGrant(id: number): Promise<void> {
+  return apiFetch<void>(`/grants/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface ZipCode extends LookupRow {
+  zip_code: string
+  priority: string
+}
+
+export function listZipCodes(labId: number): Promise<ZipCode[]> {
+  return apiFetch<ZipCode[]>(`/labs/${labId}/zip-codes/`)
+}
+export function createZipCode(labId: number, zipCode: string, priority: string): Promise<ZipCode> {
+  return apiFetch<ZipCode>(`/labs/${labId}/zip-codes/`, {
+    method: 'POST',
+    body: JSON.stringify({ zip_code: zipCode, priority }),
+  })
+}
+export function updateZipCode(id: number, zipCode: string, priority: string): Promise<ZipCode> {
+  return apiFetch<ZipCode>(`/zip-codes/${id}/`, {
+    method: 'PUT',
+    body: JSON.stringify({ zip_code: zipCode, priority }),
+  })
+}
+export function deactivateZipCode(id: number): Promise<void> {
+  return apiFetch<void>(`/zip-codes/${id}/deactivate`, { method: 'POST' })
+}

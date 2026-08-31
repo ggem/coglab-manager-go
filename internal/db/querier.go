@@ -180,6 +180,7 @@ type Querier interface {
 	// the scheduling search's backtracking draws from for that role.
 	ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]User, error)
 	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
+	ListLabsForUser(ctx context.Context, userID int64) ([]Lab, error)
 	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
 	// One recipient's current upcoming Pending schedule in one lab -- the
