@@ -49,15 +49,20 @@ input:focus-visible {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
 }
 
+/* wrap as whole blocks (nav, header-user) when the row runs out of
+   room, rather than each phrase inside them breaking mid-word --
+   nowrap on the individual text below is what makes that possible. */
 .app header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem 1.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -65,6 +70,12 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 1.5rem;
+}
+
+.app-name,
+.app header nav a,
+.header-user span {
+  white-space: nowrap;
 }
 
 .app-name {
@@ -83,6 +94,7 @@ input:focus-visible {
 
 .header-user {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
 }
@@ -101,20 +113,22 @@ input:focus-visible {
   color: #666;
 }
 
-.participant-search .tabs {
+/* Shared by ParticipantSearch and LabSetup -- both switch between a
+   handful of views with the same button-row tab style. */
+.tabs {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
-.participant-search .tabs button {
+.tabs button {
   padding: 0.4rem 1rem;
   border: 1px solid #ccc;
   border-radius: 4px 4px 0 0;
   background: #eee;
 }
 
-.participant-search .tabs button.active {
+.tabs button.active {
   background: white;
   border-bottom-color: white;
   font-weight: 600;
@@ -142,8 +156,95 @@ input:focus-visible {
   color: white;
 }
 
-.participant-search table {
+/* Shared by ParticipantSearch and LookupTable -- both list results in
+   a plain white table. */
+table {
   background: white;
   border-radius: 4px;
   overflow: hidden;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.lookup-table {
+  margin-bottom: 1.5rem;
+}
+
+/* Scoped to the actions cell specifically, not just "any button in a
+   .lookup-table td" -- a nested LookupTable (condition values) renders
+   entirely inside the outer table's expanded-row <td>, so a depth-based
+   selector here would also catch its unrelated Add button and, via a
+   specificity split against .lookup-table-add button below (this rule
+   wins on background, that one wins on the still-unset color), silently
+   turn it white-on-white. */
+.lookup-table-actions button {
+  padding: 0.3rem 0.6rem;
+  margin-right: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.85rem;
+}
+
+.expand-toggle {
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+  font-size: 1rem !important;
+}
+
+.expanded-row td {
+  background: #f7f7f7;
+  padding: 1rem;
+}
+
+.show-deactivated {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.lookup-table-add {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.lookup-table-add input {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.lookup-table-add button {
+  padding: 0.4rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #2a5db0;
+  color: white;
+}
+
+.lab-picker ul {
+  list-style: none;
+  padding: 0;
+}
+
+.lab-picker li {
+  margin-bottom: 0.5rem;
+}
+
+.header-user select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
 }

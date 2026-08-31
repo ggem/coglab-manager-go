@@ -31,3 +31,36 @@ func (q *Queries) GetLabMembership(ctx context.Context, arg GetLabMembershipPara
 	)
 	return i, err
 }
+
+const listLabsForUser = `-- name: ListLabsForUser :many
+select labs.id, labs.name, labs.short_name, labs.created_at, labs.updated_at from labs
+join lab_memberships on lab_memberships.lab_id = labs.id
+where lab_memberships.user_id = $1
+order by labs.name
+`
+
+func (q *Queries) ListLabsForUser(ctx context.Context, userID int64) ([]Lab, error) {
+	rows, err := q.db.Query(ctx, listLabsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Lab
+	for rows.Next() {
+		var i Lab
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ShortName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

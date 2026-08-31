@@ -122,6 +122,7 @@ type Querier struct {
 	DeactivateConditionValueFunc       func(ctx context.Context, id int64) error
 
 	GetLabMembershipFunc func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
+	ListLabsForUserFunc  func(ctx context.Context, userID int64) ([]db.Lab, error)
 
 	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
 	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
@@ -707,6 +708,13 @@ func (q *Querier) GetLabMembership(ctx context.Context, arg db.GetLabMembershipP
 		panic("dbfake: GetLabMembership not implemented")
 	}
 	return q.GetLabMembershipFunc(ctx, arg)
+}
+
+func (q *Querier) ListLabsForUser(ctx context.Context, userID int64) ([]db.Lab, error) {
+	if q.ListLabsForUserFunc == nil {
+		panic("dbfake: ListLabsForUser not implemented")
+	}
+	return q.ListLabsForUserFunc(ctx, userID)
 }
 
 func (q *Querier) ListConditionsByLab(ctx context.Context, labID int64) ([]db.Condition, error) {
