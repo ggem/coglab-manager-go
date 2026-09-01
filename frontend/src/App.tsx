@@ -5,6 +5,8 @@ import Layout from './Layout'
 import ParticipantSearch from './ParticipantSearch'
 import LabPicker from './LabPicker'
 import LabSetup from './LabSetup'
+import CreateFamily from './CreateFamily'
+import FamilyDetail from './FamilyDetail'
 import { getMe, type User } from './api'
 import './App.css'
 
@@ -43,6 +45,9 @@ function App() {
         <Route path="participants" element={<ParticipantSearch />} />
         <Route path="labs" element={<LabPicker />} />
         <Route path="labs/:labId/setup" element={<LabSetup />} />
+        <Route path="families" element={<Navigate to="/app/participants" replace />} />
+        <Route path="families/new" element={<CreateFamily />} />
+        <Route path="families/:familyId" element={<FamilyDetail />} />
       </Route>
     </Routes>
   )

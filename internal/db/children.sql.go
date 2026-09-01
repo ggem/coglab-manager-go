@@ -15,7 +15,7 @@ const createChild = `-- name: CreateChild :one
 insert into children (
     family_id, first_name, last_name, sex, birth_date, due_date,
     gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie,
-    birth_complications, twin, race_ethnicity, languages,
+    birth_complications, birth_complications_notes, twin, race_ethnicity, languages,
     recruitment_source_id, recruitment_source_other, response,
     created_by_user_id
 ) values (
@@ -37,31 +37,33 @@ insert into children (
     $16,
     $17,
     $18,
-    $19
+    $19,
+    $20
 )
-returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
+returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date, birth_complications_notes
 `
 
 type CreateChildParams struct {
-	FamilyID               int64          `json:"family_id"`
-	FirstName              string         `json:"first_name"`
-	LastName               string         `json:"last_name"`
-	Sex                    string         `json:"sex"`
-	BirthDate              pgtype.Date    `json:"birth_date"`
-	DueDate                pgtype.Date    `json:"due_date"`
-	GestationalAgeWeeks    pgtype.Numeric `json:"gestational_age_weeks"`
-	BirthWeight            pgtype.Numeric `json:"birth_weight"`
-	Apgar1                 *int16         `json:"apgar_1"`
-	Apgar2                 *int16         `json:"apgar_2"`
-	Premie                 *bool          `json:"premie"`
-	BirthComplications     *bool          `json:"birth_complications"`
-	Twin                   *bool          `json:"twin"`
-	RaceEthnicity          []string       `json:"race_ethnicity"`
-	Languages              []string       `json:"languages"`
-	RecruitmentSourceID    *int64         `json:"recruitment_source_id"`
-	RecruitmentSourceOther string         `json:"recruitment_source_other"`
-	Response               string         `json:"response"`
-	CreatedByUserID        int64          `json:"created_by_user_id"`
+	FamilyID                int64          `json:"family_id"`
+	FirstName               string         `json:"first_name"`
+	LastName                string         `json:"last_name"`
+	Sex                     string         `json:"sex"`
+	BirthDate               pgtype.Date    `json:"birth_date"`
+	DueDate                 pgtype.Date    `json:"due_date"`
+	GestationalAgeWeeks     pgtype.Numeric `json:"gestational_age_weeks"`
+	BirthWeight             pgtype.Numeric `json:"birth_weight"`
+	Apgar1                  *int16         `json:"apgar_1"`
+	Apgar2                  *int16         `json:"apgar_2"`
+	Premie                  *bool          `json:"premie"`
+	BirthComplications      *bool          `json:"birth_complications"`
+	BirthComplicationsNotes string         `json:"birth_complications_notes"`
+	Twin                    *bool          `json:"twin"`
+	RaceEthnicity           []string       `json:"race_ethnicity"`
+	Languages               []string       `json:"languages"`
+	RecruitmentSourceID     *int64         `json:"recruitment_source_id"`
+	RecruitmentSourceOther  string         `json:"recruitment_source_other"`
+	Response                string         `json:"response"`
+	CreatedByUserID         int64          `json:"created_by_user_id"`
 }
 
 func (q *Queries) CreateChild(ctx context.Context, arg CreateChildParams) (Child, error) {
@@ -78,6 +80,7 @@ func (q *Queries) CreateChild(ctx context.Context, arg CreateChildParams) (Child
 		arg.Apgar2,
 		arg.Premie,
 		arg.BirthComplications,
+		arg.BirthComplicationsNotes,
 		arg.Twin,
 		arg.RaceEthnicity,
 		arg.Languages,
@@ -114,6 +117,7 @@ func (q *Queries) CreateChild(ctx context.Context, arg CreateChildParams) (Child
 		&i.UpdatedAt,
 		&i.McdiPercentile,
 		&i.McdiDate,
+		&i.BirthComplicationsNotes,
 	)
 	return i, err
 }
@@ -136,7 +140,7 @@ func (q *Queries) DeactivateChild(ctx context.Context, arg DeactivateChildParams
 }
 
 const getChildByID = `-- name: GetChildByID :one
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date from children where id = $1
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date, birth_complications_notes from children where id = $1
 `
 
 func (q *Queries) GetChildByID(ctx context.Context, id int64) (Child, error) {
@@ -169,12 +173,13 @@ func (q *Queries) GetChildByID(ctx context.Context, id int64) (Child, error) {
 		&i.UpdatedAt,
 		&i.McdiPercentile,
 		&i.McdiDate,
+		&i.BirthComplicationsNotes,
 	)
 	return i, err
 }
 
 const listChildrenByFamily = `-- name: ListChildrenByFamily :many
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date from children where family_id = $1 order by id
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date, birth_complications_notes from children where family_id = $1 order by id
 `
 
 func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]Child, error) {
@@ -213,6 +218,7 @@ func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]C
 			&i.UpdatedAt,
 			&i.McdiPercentile,
 			&i.McdiDate,
+			&i.BirthComplicationsNotes,
 		); err != nil {
 			return nil, err
 		}
@@ -225,7 +231,7 @@ func (q *Queries) ListChildrenByFamily(ctx context.Context, familyID int64) ([]C
 }
 
 const searchChildren = `-- name: SearchChildren :many
-select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
+select id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date, birth_complications_notes
 from children
 where
     ($1::text is null
@@ -321,6 +327,7 @@ func (q *Queries) SearchChildren(ctx context.Context, arg SearchChildrenParams) 
 			&i.UpdatedAt,
 			&i.McdiPercentile,
 			&i.McdiDate,
+			&i.BirthComplicationsNotes,
 		); err != nil {
 			return nil, err
 		}
@@ -345,39 +352,41 @@ update children set
     apgar_2 = $9,
     premie = $10,
     birth_complications = $11,
-    twin = $12,
-    race_ethnicity = $13,
-    languages = $14,
-    recruitment_source_id = $15,
-    recruitment_source_other = $16,
-    response = $17,
-    mcdi_percentile = $18,
-    mcdi_date = $19
-where id = $20
-returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date
+    birth_complications_notes = $12,
+    twin = $13,
+    race_ethnicity = $14,
+    languages = $15,
+    recruitment_source_id = $16,
+    recruitment_source_other = $17,
+    response = $18,
+    mcdi_percentile = $19,
+    mcdi_date = $20
+where id = $21
+returning id, family_id, first_name, last_name, sex, birth_date, due_date, gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie, birth_complications, twin, race_ethnicity, languages, recruitment_source_id, recruitment_source_other, response, created_by_user_id, deactivated_at, inactive_reason, created_at, updated_at, mcdi_percentile, mcdi_date, birth_complications_notes
 `
 
 type UpdateChildParams struct {
-	FirstName              string         `json:"first_name"`
-	LastName               string         `json:"last_name"`
-	Sex                    string         `json:"sex"`
-	BirthDate              pgtype.Date    `json:"birth_date"`
-	DueDate                pgtype.Date    `json:"due_date"`
-	GestationalAgeWeeks    pgtype.Numeric `json:"gestational_age_weeks"`
-	BirthWeight            pgtype.Numeric `json:"birth_weight"`
-	Apgar1                 *int16         `json:"apgar_1"`
-	Apgar2                 *int16         `json:"apgar_2"`
-	Premie                 *bool          `json:"premie"`
-	BirthComplications     *bool          `json:"birth_complications"`
-	Twin                   *bool          `json:"twin"`
-	RaceEthnicity          []string       `json:"race_ethnicity"`
-	Languages              []string       `json:"languages"`
-	RecruitmentSourceID    *int64         `json:"recruitment_source_id"`
-	RecruitmentSourceOther string         `json:"recruitment_source_other"`
-	Response               string         `json:"response"`
-	McdiPercentile         pgtype.Numeric `json:"mcdi_percentile"`
-	McdiDate               pgtype.Date    `json:"mcdi_date"`
-	ID                     int64          `json:"id"`
+	FirstName               string         `json:"first_name"`
+	LastName                string         `json:"last_name"`
+	Sex                     string         `json:"sex"`
+	BirthDate               pgtype.Date    `json:"birth_date"`
+	DueDate                 pgtype.Date    `json:"due_date"`
+	GestationalAgeWeeks     pgtype.Numeric `json:"gestational_age_weeks"`
+	BirthWeight             pgtype.Numeric `json:"birth_weight"`
+	Apgar1                  *int16         `json:"apgar_1"`
+	Apgar2                  *int16         `json:"apgar_2"`
+	Premie                  *bool          `json:"premie"`
+	BirthComplications      *bool          `json:"birth_complications"`
+	BirthComplicationsNotes string         `json:"birth_complications_notes"`
+	Twin                    *bool          `json:"twin"`
+	RaceEthnicity           []string       `json:"race_ethnicity"`
+	Languages               []string       `json:"languages"`
+	RecruitmentSourceID     *int64         `json:"recruitment_source_id"`
+	RecruitmentSourceOther  string         `json:"recruitment_source_other"`
+	Response                string         `json:"response"`
+	McdiPercentile          pgtype.Numeric `json:"mcdi_percentile"`
+	McdiDate                pgtype.Date    `json:"mcdi_date"`
+	ID                      int64          `json:"id"`
 }
 
 func (q *Queries) UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error) {
@@ -393,6 +402,7 @@ func (q *Queries) UpdateChild(ctx context.Context, arg UpdateChildParams) (Child
 		arg.Apgar2,
 		arg.Premie,
 		arg.BirthComplications,
+		arg.BirthComplicationsNotes,
 		arg.Twin,
 		arg.RaceEthnicity,
 		arg.Languages,
@@ -431,6 +441,7 @@ func (q *Queries) UpdateChild(ctx context.Context, arg UpdateChildParams) (Child
 		&i.UpdatedAt,
 		&i.McdiPercentile,
 		&i.McdiDate,
+		&i.BirthComplicationsNotes,
 	)
 	return i, err
 }

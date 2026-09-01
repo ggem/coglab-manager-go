@@ -34,7 +34,7 @@ type Querier struct {
 	GetGuardianByIDFunc       func(ctx context.Context, id int64) (db.Guardian, error)
 	ListGuardiansByFamilyFunc func(ctx context.Context, familyID int64) ([]db.Guardian, error)
 	UpdateGuardianFunc        func(ctx context.Context, arg db.UpdateGuardianParams) (db.Guardian, error)
-	DeleteGuardianFunc        func(ctx context.Context, id int64) error
+	DeactivateGuardianFunc    func(ctx context.Context, id int64) error
 
 	CreateChildFunc          func(ctx context.Context, arg db.CreateChildParams) (db.Child, error)
 	GetChildByIDFunc         func(ctx context.Context, id int64) (db.Child, error)
@@ -290,11 +290,11 @@ func (q *Querier) UpdateGuardian(ctx context.Context, arg db.UpdateGuardianParam
 	return q.UpdateGuardianFunc(ctx, arg)
 }
 
-func (q *Querier) DeleteGuardian(ctx context.Context, id int64) error {
-	if q.DeleteGuardianFunc == nil {
-		panic("dbfake: DeleteGuardian not implemented")
+func (q *Querier) DeactivateGuardian(ctx context.Context, id int64) error {
+	if q.DeactivateGuardianFunc == nil {
+		panic("dbfake: DeactivateGuardian not implemented")
 	}
-	return q.DeleteGuardianFunc(ctx, id)
+	return q.DeactivateGuardianFunc(ctx, id)
 }
 
 func (q *Querier) CreateChild(ctx context.Context, arg db.CreateChildParams) (db.Child, error) {

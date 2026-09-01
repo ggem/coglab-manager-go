@@ -194,10 +194,10 @@ td {
 }
 
 .expand-toggle {
-  border: none !important;
-  background: none !important;
-  padding: 0 !important;
-  font-size: 1rem !important;
+  all: unset;
+  display: inline-flex; /* Ensures alignment works predictably in React */
+  cursor: pointer;      /* Crucial: puts back the standard "clickable" pointer finger */
+  font-size: 1rem;
 }
 
 .expanded-row td {
@@ -247,4 +247,143 @@ td {
   padding: 0.3rem 0.5rem;
   border: 1px solid #ccc;
   border-radius: 4px;
+}
+
+.add-family {
+  margin-left: auto;
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  background: #2a5db0;
+  color: white;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+/* Shared by the family-fields edit form, CreateFamily, and ChildForm --
+   every field is a <label> wrapping its own text + input, laid out as a
+   wrapping row of fixed-width fields rather than a single-column stack,
+   since ChildForm alone has ~15 of them. */
+.family-fields form,
+.create-family form,
+.child-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.family-fields form label,
+.create-family form label,
+.child-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #555;
+  width: 220px;
+}
+
+.family-fields form input,
+.family-fields form select,
+.create-family form input,
+.create-family form select,
+.child-form input,
+.child-form select,
+.child-form textarea {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.child-form textarea {
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.child-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+}
+
+.child-form fieldset legend {
+  font-size: 0.9rem;
+  color: #555;
+  padding: 0 0.25rem;
+}
+
+.child-form .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  font-size: 0.85rem;
+}
+
+.child-form button {
+  align-self: flex-end;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #2a5db0;
+  color: white;
+}
+
+.family-fields > div,
+.create-family {
+  margin-bottom: 1rem;
+}
+
+.deactivate-reason {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.deactivate-reason input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.child-notes {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+}
+
+.child-notes ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.child-notes li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.child-notes .note-meta {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.child-notes form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.child-notes textarea {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+  min-height: 3rem;
 }

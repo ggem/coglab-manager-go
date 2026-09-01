@@ -21,7 +21,7 @@ values (
     $7,
     $8
 )
-returning id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at
+returning id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at, deactivated_at
 `
 
 type CreateGuardianParams struct {
@@ -59,21 +59,22 @@ func (q *Queries) CreateGuardian(ctx context.Context, arg CreateGuardianParams) 
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeactivatedAt,
 	)
 	return i, err
 }
 
-const deleteGuardian = `-- name: DeleteGuardian :exec
-delete from guardians where id = $1
+const deactivateGuardian = `-- name: DeactivateGuardian :exec
+update guardians set deactivated_at = now() where id = $1
 `
 
-func (q *Queries) DeleteGuardian(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteGuardian, id)
+func (q *Queries) DeactivateGuardian(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deactivateGuardian, id)
 	return err
 }
 
 const getGuardianByID = `-- name: GetGuardianByID :one
-select id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at from guardians where id = $1
+select id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at, deactivated_at from guardians where id = $1
 `
 
 func (q *Queries) GetGuardianByID(ctx context.Context, id int64) (Guardian, error) {
@@ -91,12 +92,13 @@ func (q *Queries) GetGuardianByID(ctx context.Context, id int64) (Guardian, erro
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeactivatedAt,
 	)
 	return i, err
 }
 
 const listGuardiansByFamily = `-- name: ListGuardiansByFamily :many
-select id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at from guardians where family_id = $1 order by id
+select id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at, deactivated_at from guardians where family_id = $1 order by id
 `
 
 func (q *Queries) ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error) {
@@ -120,6 +122,7 @@ func (q *Queries) ListGuardiansByFamily(ctx context.Context, familyID int64) ([]
 			&i.Email,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -141,7 +144,7 @@ update guardians set
     phone_type = $6,
     email = $7
 where id = $8
-returning id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at
+returning id, family_id, first_name, last_name, education, occupation, phone_number, phone_type, email, created_at, updated_at, deactivated_at
 `
 
 type UpdateGuardianParams struct {
@@ -179,6 +182,7 @@ func (q *Queries) UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) 
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeactivatedAt,
 	)
 	return i, err
 }

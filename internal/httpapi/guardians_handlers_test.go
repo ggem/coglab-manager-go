@@ -116,12 +116,12 @@ func TestHandleUpdateGuardian_Success(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteGuardian_Success(t *testing.T) {
-	var deletedID int64
+func TestHandleDeactivateGuardian_Success(t *testing.T) {
+	var deactivatedID int64
 	var capturedAudit db.CreateAuditEventParams
 	q := &dbfake.Querier{
-		DeleteGuardianFunc: func(ctx context.Context, id int64) error {
-			deletedID = id
+		DeactivateGuardianFunc: func(ctx context.Context, id int64) error {
+			deactivatedID = id
 			return nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
@@ -136,18 +136,18 @@ func TestHandleDeleteGuardian_Success(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
 	}
-	if deletedID != 9 {
-		t.Errorf("DeleteGuardian called with id = %d, want 9", deletedID)
+	if deactivatedID != 9 {
+		t.Errorf("DeactivateGuardian called with id = %d, want 9", deactivatedID)
 	}
-	if capturedAudit.Action != ActionGuardianDeleted {
-		t.Errorf("audit action = %q, want %q", capturedAudit.Action, ActionGuardianDeleted)
+	if capturedAudit.Action != ActionGuardianDeactivated {
+		t.Errorf("audit action = %q, want %q", capturedAudit.Action, ActionGuardianDeactivated)
 	}
 	if capturedAudit.EntityID == nil || *capturedAudit.EntityID != 9 {
 		t.Errorf("audit EntityID = %v, want 9", capturedAudit.EntityID)
 	}
 }
 
-func TestHandleDeleteGuardian_RequiresAuth(t *testing.T) {
+func TestHandleDeactivateGuardian_RequiresAuth(t *testing.T) {
 	s := newTestServer(&dbfake.Querier{})
 
 	rec := doRequest(t, s, http.MethodDelete, "/guardians/9/", nil, nil)

@@ -16,6 +16,7 @@ const apiPaths = [
   '/guardians',
   '/children',
   '/labs',
+  '/recruitment-sources',
   '/conditions',
   '/condition-values',
   '/equipment',

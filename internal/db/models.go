@@ -48,32 +48,33 @@ type AuditEvent struct {
 }
 
 type Child struct {
-	ID                     int64              `json:"id"`
-	FamilyID               int64              `json:"family_id"`
-	FirstName              string             `json:"first_name"`
-	LastName               string             `json:"last_name"`
-	Sex                    string             `json:"sex"`
-	BirthDate              pgtype.Date        `json:"birth_date"`
-	DueDate                pgtype.Date        `json:"due_date"`
-	GestationalAgeWeeks    pgtype.Numeric     `json:"gestational_age_weeks"`
-	BirthWeight            pgtype.Numeric     `json:"birth_weight"`
-	Apgar1                 *int16             `json:"apgar_1"`
-	Apgar2                 *int16             `json:"apgar_2"`
-	Premie                 *bool              `json:"premie"`
-	BirthComplications     *bool              `json:"birth_complications"`
-	Twin                   *bool              `json:"twin"`
-	RaceEthnicity          []string           `json:"race_ethnicity"`
-	Languages              []string           `json:"languages"`
-	RecruitmentSourceID    *int64             `json:"recruitment_source_id"`
-	RecruitmentSourceOther string             `json:"recruitment_source_other"`
-	Response               string             `json:"response"`
-	CreatedByUserID        int64              `json:"created_by_user_id"`
-	DeactivatedAt          pgtype.Timestamptz `json:"deactivated_at"`
-	InactiveReason         string             `json:"inactive_reason"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	McdiPercentile         pgtype.Numeric     `json:"mcdi_percentile"`
-	McdiDate               pgtype.Date        `json:"mcdi_date"`
+	ID                      int64              `json:"id"`
+	FamilyID                int64              `json:"family_id"`
+	FirstName               string             `json:"first_name"`
+	LastName                string             `json:"last_name"`
+	Sex                     string             `json:"sex"`
+	BirthDate               pgtype.Date        `json:"birth_date"`
+	DueDate                 pgtype.Date        `json:"due_date"`
+	GestationalAgeWeeks     pgtype.Numeric     `json:"gestational_age_weeks"`
+	BirthWeight             pgtype.Numeric     `json:"birth_weight"`
+	Apgar1                  *int16             `json:"apgar_1"`
+	Apgar2                  *int16             `json:"apgar_2"`
+	Premie                  *bool              `json:"premie"`
+	BirthComplications      *bool              `json:"birth_complications"`
+	Twin                    *bool              `json:"twin"`
+	RaceEthnicity           []string           `json:"race_ethnicity"`
+	Languages               []string           `json:"languages"`
+	RecruitmentSourceID     *int64             `json:"recruitment_source_id"`
+	RecruitmentSourceOther  string             `json:"recruitment_source_other"`
+	Response                string             `json:"response"`
+	CreatedByUserID         int64              `json:"created_by_user_id"`
+	DeactivatedAt           pgtype.Timestamptz `json:"deactivated_at"`
+	InactiveReason          string             `json:"inactive_reason"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	McdiPercentile          pgtype.Numeric     `json:"mcdi_percentile"`
+	McdiDate                pgtype.Date        `json:"mcdi_date"`
+	BirthComplicationsNotes string             `json:"birth_complications_notes"`
 }
 
 type Condition struct {
@@ -176,17 +177,18 @@ type Grant struct {
 }
 
 type Guardian struct {
-	ID          int64              `json:"id"`
-	FamilyID    int64              `json:"family_id"`
-	FirstName   string             `json:"first_name"`
-	LastName    string             `json:"last_name"`
-	Education   string             `json:"education"`
-	Occupation  string             `json:"occupation"`
-	PhoneNumber string             `json:"phone_number"`
-	PhoneType   *string            `json:"phone_type"`
-	Email       string             `json:"email"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID            int64              `json:"id"`
+	FamilyID      int64              `json:"family_id"`
+	FirstName     string             `json:"first_name"`
+	LastName      string             `json:"last_name"`
+	Education     string             `json:"education"`
+	Occupation    string             `json:"occupation"`
+	PhoneNumber   string             `json:"phone_number"`
+	PhoneType     *string            `json:"phone_type"`
+	Email         string             `json:"email"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
 }
 
 type Lab struct {

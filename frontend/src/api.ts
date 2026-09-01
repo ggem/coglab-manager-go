@@ -117,6 +117,180 @@ export function searchFamilies(query: string): Promise<FamilySearchResult[]> {
   return apiFetch<FamilySearchResult[]>(`/families/search?${params.toString()}`)
 }
 
+// --- Families, guardians, children, notes ---
+//
+// Families/children/guardians are not lab-scoped (unlike everything in
+// the "Lab setup" section below) -- confirmed via the families/children
+// migrations, matching legacy where participants were shared across the
+// whole system, not siloed per lab.
+
+export interface Family {
+  id: number
+  address: string
+  city: string
+  state: string
+  zip: string
+  preferred_contact_method: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FamilyInput {
+  address: string
+  city: string
+  state: string
+  zip: string
+  preferred_contact_method: string | null
+}
+
+export function createFamily(input: FamilyInput): Promise<Family> {
+  return apiFetch<Family>('/families/', { method: 'POST', body: JSON.stringify(input) })
+}
+export function getFamily(id: number): Promise<Family> {
+  return apiFetch<Family>(`/families/${id}/`)
+}
+export function updateFamily(id: number, input: FamilyInput): Promise<Family> {
+  return apiFetch<Family>(`/families/${id}/`, { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export interface Guardian {
+  id: number
+  family_id: number
+  first_name: string
+  last_name: string
+  education: string
+  occupation: string
+  phone_number: string
+  phone_type: string | null
+  email: string
+  deactivated: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface GuardianInput {
+  first_name: string
+  last_name: string
+  education: string
+  occupation: string
+  phone_number: string
+  phone_type: string | null
+  email: string
+}
+
+export function listGuardiansByFamily(familyId: number): Promise<Guardian[]> {
+  return apiFetch<Guardian[]>(`/families/${familyId}/guardians/`)
+}
+export function createGuardian(familyId: number, input: GuardianInput): Promise<Guardian> {
+  return apiFetch<Guardian>(`/families/${familyId}/guardians/`, { method: 'POST', body: JSON.stringify(input) })
+}
+export function updateGuardian(id: number, input: GuardianInput): Promise<Guardian> {
+  return apiFetch<Guardian>(`/guardians/${id}/`, { method: 'PUT', body: JSON.stringify(input) })
+}
+// Soft-delete (deactivated_at), despite the DELETE verb -- matches Child
+// and the rest of this app's deactivate-not-destroy philosophy.
+export function deactivateGuardian(id: number): Promise<void> {
+  return apiFetch<void>(`/guardians/${id}/`, { method: 'DELETE' })
+}
+
+export interface Child {
+  id: number
+  family_id: number
+  first_name: string
+  last_name: string
+  sex: string
+  birth_date: string | null
+  due_date: string | null
+  gestational_age_weeks: number | null
+  birth_weight: number | null
+  apgar_1: number | null
+  apgar_2: number | null
+  premie: boolean | null
+  birth_complications: boolean | null
+  birth_complications_notes: string
+  twin: boolean | null
+  race_ethnicity: string[]
+  languages: string[]
+  recruitment_source_id: number | null
+  recruitment_source_other: string
+  response: string
+  mcdi_percentile: number | null
+  mcdi_date: string | null
+  deactivated: boolean
+  inactive_reason: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ChildInput {
+  first_name: string
+  last_name: string
+  sex: string
+  birth_date: string | null
+  due_date: string | null
+  gestational_age_weeks: number | null
+  birth_weight: number | null
+  apgar_1: number | null
+  apgar_2: number | null
+  premie: boolean | null
+  birth_complications: boolean | null
+  birth_complications_notes: string
+  twin: boolean | null
+  race_ethnicity: string[]
+  languages: string[]
+  recruitment_source_id: number | null
+  recruitment_source_other: string
+  response: string
+  // Manual staff data entry -- ignored by the create endpoint (a new
+  // child can't have results yet), used by update.
+  mcdi_percentile: number | null
+  mcdi_date: string | null
+}
+
+export function listChildrenByFamily(familyId: number): Promise<Child[]> {
+  return apiFetch<Child[]>(`/families/${familyId}/children/`)
+}
+export function createChild(familyId: number, input: ChildInput): Promise<Child> {
+  return apiFetch<Child>(`/families/${familyId}/children/`, { method: 'POST', body: JSON.stringify(input) })
+}
+export function updateChild(id: number, input: ChildInput): Promise<Child> {
+  return apiFetch<Child>(`/children/${id}/`, { method: 'PUT', body: JSON.stringify(input) })
+}
+export function deactivateChild(id: number, reason: string): Promise<void> {
+  return apiFetch<void>(`/children/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+export interface Note {
+  id: number
+  author_user_id: number
+  body: string
+  created_at: string
+}
+
+// Notes are child-only, matching legacy (families/guardians never had
+// notes) and the backend, which hardcodes entity_type "child".
+export function listChildNotes(childId: number): Promise<Note[]> {
+  return apiFetch<Note[]>(`/children/${childId}/notes/`)
+}
+export function createChildNote(childId: number, body: string): Promise<Note> {
+  return apiFetch<Note>(`/children/${childId}/notes/`, { method: 'POST', body: JSON.stringify({ body }) })
+}
+
+export interface RecruitmentSource {
+  id: number
+  name: string
+}
+
+// Populates the child form's recruitment-source dropdown, paired with
+// a free-text "other" field (recruitment_source_other) always available
+// alongside it, matching legacy's source/source_other pairing.
+export function listRecruitmentSources(): Promise<RecruitmentSource[]> {
+  return apiFetch<RecruitmentSource[]>('/recruitment-sources')
+}
+export function createRecruitmentSource(name: string): Promise<RecruitmentSource> {
+  return apiFetch<RecruitmentSource>('/recruitment-sources', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
 // --- Labs ---
 
 export interface Lab {
