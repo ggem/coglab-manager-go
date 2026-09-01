@@ -12,7 +12,7 @@ import (
 )
 
 const listEligibleChildrenForExperiment = `-- name: ListEligibleChildrenForExperiment :many
-select children.id, children.family_id, children.first_name, children.last_name, children.sex, children.birth_date, children.due_date, children.gestational_age_weeks, children.birth_weight, children.apgar_1, children.apgar_2, children.premie, children.birth_complications, children.twin, children.race_ethnicity, children.languages, children.recruitment_source_id, children.recruitment_source_other, children.response, children.created_by_user_id, children.deactivated_at, children.inactive_reason, children.created_at, children.updated_at, children.mcdi_percentile, children.mcdi_date
+select children.id, children.family_id, children.first_name, children.last_name, children.sex, children.birth_date, children.due_date, children.gestational_age_weeks, children.birth_weight, children.apgar_1, children.apgar_2, children.premie, children.birth_complications, children.twin, children.race_ethnicity, children.languages, children.recruitment_source_id, children.recruitment_source_other, children.response, children.created_by_user_id, children.deactivated_at, children.inactive_reason, children.created_at, children.updated_at, children.mcdi_percentile, children.mcdi_date, children.birth_complications_notes
 from children
 join experiments on experiments.id = $1
 where
@@ -99,6 +99,7 @@ func (q *Queries) ListEligibleChildrenForExperiment(ctx context.Context, arg Lis
 			&i.UpdatedAt,
 			&i.McdiPercentile,
 			&i.McdiDate,
+			&i.BirthComplicationsNotes,
 		); err != nil {
 			return nil, err
 		}

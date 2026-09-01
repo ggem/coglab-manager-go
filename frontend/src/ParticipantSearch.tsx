@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
+import { Link } from 'react-router-dom'
 import {
   searchChildren,
   searchFamilies,
@@ -18,7 +19,7 @@ export default function ParticipantSearch() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
 
-  async function handleSearch(e: FormEvent) {
+  async function handleSearch(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setLoading(true)
@@ -59,6 +60,9 @@ export default function ParticipantSearch() {
         >
           Families
         </button>
+        <Link to="/app/families/new" className="add-family">
+          Add family
+        </Link>
       </div>
       <form onSubmit={handleSearch}>
         <input
@@ -90,7 +94,9 @@ export default function ParticipantSearch() {
             {children.map((c) => (
               <tr key={c.id}>
                 <td>
-                  {c.first_name} {c.last_name}
+                  <Link to={`/app/families/${c.family_id}`}>
+                    {c.first_name} {c.last_name}
+                  </Link>
                 </td>
                 <td>{c.sex}</td>
                 <td>{c.birth_date ?? '—'}</td>
@@ -112,7 +118,9 @@ export default function ParticipantSearch() {
           <tbody>
             {families.map((f) => (
               <tr key={f.id}>
-                <td>{f.address}</td>
+                <td>
+                  <Link to={`/app/families/${f.id}`}>{f.address || `Family #${f.id}`}</Link>
+                </td>
                 <td>{f.city}</td>
                 <td>{f.state}</td>
                 <td>{f.zip}</td>

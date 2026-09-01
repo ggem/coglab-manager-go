@@ -11,7 +11,14 @@ import { errorMessage } from './api'
 export interface LookupField {
   key: string
   label: string
-  type: 'text' | 'number'
+  type: 'text' | 'number' | 'select'
+  // Required when type is 'select' -- the fixed set of values a column
+  // like guardians.education/phone_type's CHECK constraint allows.
+  options?: { value: string; label: string }[]
+  // Defaults to true (every existing lookup table's fields are
+  // required) -- set false for an optional enum like phone_type, which
+  // has no NOT NULL constraint.
+  required?: boolean
 }
 
 interface Row {
@@ -26,6 +33,17 @@ interface Row {
 // (Condition, Equipment, ...) to declare an index signature of its own.
 function fieldValue(row: Row, key: string): unknown {
   return (row as unknown as Record<string, unknown>)[key]
+}
+
+// A select field displays its option's label, not the raw stored value
+// (e.g. "High school graduate" rather than "hs_grad_no_college") --
+// every other field type keeps its existing plain String() display.
+function fieldDisplay(row: Row, f: LookupField): string {
+  if (f.type === 'select' && f.options) {
+    const opt = f.options.find((o) => o.value === fieldValue(row, f.key))
+    if (opt) return opt.label
+  }
+  return String(fieldValue(row, f.key))
 }
 
 interface Props<T extends Row> {
@@ -157,13 +175,27 @@ export default function LookupTable<T extends Row>({
                 {fields.map((f) => (
                   <td key={f.key}>
                     {editingId === row.id ? (
-                      <input
-                        type={f.type}
-                        value={editValues[f.key] ?? ''}
-                        onChange={(e) => setEditValues({ ...editValues, [f.key]: e.target.value })}
-                      />
+                      f.type === 'select' ? (
+                        <select
+                          value={editValues[f.key] ?? ''}
+                          onChange={(e) => setEditValues({ ...editValues, [f.key]: e.target.value })}
+                        >
+                          {f.required === false && <option value="">—</option>}
+                          {f.options?.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={f.type}
+                          value={editValues[f.key] ?? ''}
+                          onChange={(e) => setEditValues({ ...editValues, [f.key]: e.target.value })}
+                        />
+                      )
                     ) : (
-                      String(fieldValue(row, f.key))
+                      fieldDisplay(row, f)
                     )}
                   </td>
                 ))}
@@ -220,16 +252,35 @@ export default function LookupTable<T extends Row>({
         Show deactivated
       </label>
       <form onSubmit={handleCreate} className="lookup-table-add">
-        {fields.map((f) => (
-          <input
-            key={f.key}
-            type={f.type}
-            placeholder={f.label}
-            value={newValues[f.key] ?? ''}
-            onChange={(e) => setNewValues({ ...newValues, [f.key]: e.target.value })}
-            required
-          />
-        ))}
+        {fields.map((f) =>
+          f.type === 'select' ? (
+            <select
+              key={f.key}
+              aria-label={f.label}
+              value={newValues[f.key] ?? ''}
+              onChange={(e) => setNewValues({ ...newValues, [f.key]: e.target.value })}
+              required={f.required !== false}
+            >
+              <option value="" disabled={f.required !== false}>
+                {f.label}
+              </option>
+              {f.options?.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              key={f.key}
+              type={f.type}
+              placeholder={f.label}
+              value={newValues[f.key] ?? ''}
+              onChange={(e) => setNewValues({ ...newValues, [f.key]: e.target.value })}
+              required={f.required !== false}
+            />
+          ),
+        )}
         <button type="submit" disabled={createMutation.isPending}>
           {createMutation.isPending ? 'Adding…' : 'Add'}
         </button>

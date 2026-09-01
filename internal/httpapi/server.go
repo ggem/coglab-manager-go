@@ -61,6 +61,11 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/me", s.handleMe)
 		r.Get("/labs", s.handleListMyLabs)
 
+		r.Route("/recruitment-sources", func(r chi.Router) {
+			r.Post("/", s.handleCreateRecruitmentSource)
+			r.Get("/", s.handleListRecruitmentSources)
+		})
+
 		r.Route("/families", func(r chi.Router) {
 			r.Post("/", s.handleCreateFamily)
 			r.Get("/search", s.handleSearchFamilies)
@@ -81,7 +86,7 @@ func (s *Server) Routes() http.Handler {
 		r.Route("/guardians/{guardianID}", func(r chi.Router) {
 			r.Get("/", s.handleGetGuardian)
 			r.Put("/", s.handleUpdateGuardian)
-			r.Delete("/", s.handleDeleteGuardian)
+			r.Delete("/", s.handleDeactivateGuardian)
 		})
 
 		r.Route("/children", func(r chi.Router) {

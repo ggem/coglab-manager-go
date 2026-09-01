@@ -53,13 +53,13 @@ type Querier interface {
 	DeactivateExperiment(ctx context.Context, id int64) error
 	DeactivateExperimentRole(ctx context.Context, id int64) error
 	DeactivateGrant(ctx context.Context, id int64) error
+	DeactivateGuardian(ctx context.Context, id int64) error
 	DeactivateLabAvailabilityGeneral(ctx context.Context, id int64) error
 	DeactivateLabAvailabilitySpecific(ctx context.Context, id int64) error
 	DeactivateNewsletter(ctx context.Context, id int64) error
 	DeactivateProtocol(ctx context.Context, id int64) error
 	DeactivateScheduleBlocking(ctx context.Context, id int64) error
 	DeactivateZipCode(ctx context.Context, id int64) error
-	DeleteGuardian(ctx context.Context, id int64) error
 	// Per-child listing of 'arrived' appointments for one experiment in a
 	// date range, with age at the appointment (in months) and the family's
 	// first (lowest-id) guardian's education level. Handler computes summary

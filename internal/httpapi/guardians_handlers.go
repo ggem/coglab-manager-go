@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	ActionGuardianCreated = "guardian.created"
-	ActionGuardianUpdated = "guardian.updated"
-	ActionGuardianDeleted = "guardian.deleted"
+	ActionGuardianCreated     = "guardian.created"
+	ActionGuardianUpdated     = "guardian.updated"
+	ActionGuardianDeactivated = "guardian.deactivated"
 )
 
 type guardianRequest struct {
@@ -34,6 +34,7 @@ type guardianResponse struct {
 	PhoneNumber string    `json:"phone_number"`
 	PhoneType   *string   `json:"phone_type"`
 	Email       string    `json:"email"`
+	Deactivated bool      `json:"deactivated"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -49,6 +50,7 @@ func guardianToResponse(g db.Guardian) guardianResponse {
 		PhoneNumber: g.PhoneNumber,
 		PhoneType:   g.PhoneType,
 		Email:       g.Email,
+		Deactivated: g.DeactivatedAt.Valid,
 		CreatedAt:   g.CreatedAt.Time,
 		UpdatedAt:   g.UpdatedAt.Time,
 	}
@@ -162,20 +164,20 @@ func (s *Server) handleUpdateGuardian(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, guardianToResponse(guardian))
 }
 
-func (s *Server) handleDeleteGuardian(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDeactivateGuardian(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(w, r, "guardianID")
 	if !ok {
 		return
 	}
 
-	if err := s.queries.DeleteGuardian(r.Context(), id); err != nil {
+	if err := s.queries.DeactivateGuardian(r.Context(), id); err != nil {
 		s.writeDBError(w, err)
 		return
 	}
 
 	s.recordAuditEvent(r, audit.Event{
 		ActorUserID: currentUserID(r.Context()),
-		Action:      ActionGuardianDeleted,
+		Action:      ActionGuardianDeactivated,
 		EntityType:  ptr("guardian"),
 		EntityID:    &id,
 	})

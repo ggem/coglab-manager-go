@@ -2,7 +2,7 @@
 insert into children (
     family_id, first_name, last_name, sex, birth_date, due_date,
     gestational_age_weeks, birth_weight, apgar_1, apgar_2, premie,
-    birth_complications, twin, race_ethnicity, languages,
+    birth_complications, birth_complications_notes, twin, race_ethnicity, languages,
     recruitment_source_id, recruitment_source_other, response,
     created_by_user_id
 ) values (
@@ -18,6 +18,7 @@ insert into children (
     sqlc.narg(apgar_2),
     sqlc.narg(premie),
     sqlc.narg(birth_complications),
+    sqlc.arg(birth_complications_notes),
     sqlc.narg(twin),
     sqlc.arg(race_ethnicity),
     sqlc.arg(languages),
@@ -47,6 +48,7 @@ update children set
     apgar_2 = sqlc.narg(apgar_2),
     premie = sqlc.narg(premie),
     birth_complications = sqlc.narg(birth_complications),
+    birth_complications_notes = sqlc.arg(birth_complications_notes),
     twin = sqlc.narg(twin),
     race_ethnicity = sqlc.arg(race_ethnicity),
     languages = sqlc.arg(languages),

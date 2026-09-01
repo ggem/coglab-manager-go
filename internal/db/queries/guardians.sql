@@ -30,5 +30,5 @@ update guardians set
 where id = sqlc.arg(id)
 returning *;
 
--- name: DeleteGuardian :exec
-delete from guardians where id = sqlc.arg(id);
+-- name: DeactivateGuardian :exec
+update guardians set deactivated_at = now() where id = sqlc.arg(id);
