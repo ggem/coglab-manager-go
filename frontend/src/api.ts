@@ -501,3 +501,137 @@ export function getLabMembers(labId: number): Promise<LabMember[]> {
   return apiFetch<LabMember[]>(`/labs/${labId}/members`)
 }
 
+// --- Experiments ---
+
+export interface Experiment {
+  id: number
+  lab_id: number
+  name: string
+  description: string
+  sessions: number
+  age_range_min_months: number | null
+  age_range_max_months: number | null
+  start_date: string | null
+  end_date: string | null
+  status: string
+  duration_minutes: number
+  filter_premies: boolean
+  filter_min_languages: number
+  filter_languages: string[]
+  protocol_id: number | null
+  experiment_type_id: number | null
+  deactivated: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ExperimentInput {
+  name: string
+  description: string
+  sessions: number
+  age_range_min_months: number | null
+  age_range_max_months: number | null
+  start_date: string | null
+  end_date: string | null
+  status: string
+  duration_minutes: number
+  filter_premies: boolean
+  filter_min_languages: number
+  filter_languages: string[]
+  protocol_id: number | null
+  experiment_type_id: number | null
+  // create-only -- ignored by the update endpoint. When set, the
+  // backend also creates a dedicated "<name> Experimenter" role and
+  // attaches it as a training requirement, opt-in rather than
+  // legacy's silent always-on behavior.
+  create_experimenter_role?: boolean
+}
+
+export function listExperiments(labId: number): Promise<Experiment[]> {
+  return apiFetch<Experiment[]>(`/labs/${labId}/experiments/`)
+}
+export function getExperiment(id: number): Promise<Experiment> {
+  return apiFetch<Experiment>(`/experiments/${id}/`)
+}
+export function createExperiment(labId: number, input: ExperimentInput): Promise<Experiment> {
+  return apiFetch<Experiment>(`/labs/${labId}/experiments/`, { method: 'POST', body: JSON.stringify(input) })
+}
+export function updateExperiment(id: number, input: ExperimentInput): Promise<Experiment> {
+  return apiFetch<Experiment>(`/experiments/${id}/`, { method: 'PUT', body: JSON.stringify(input) })
+}
+export function deactivateExperiment(id: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${id}/deactivate`, { method: 'POST' })
+}
+
+// --- Experiment requirement/association management ---
+//
+// Five parallel attach/detach sets against an experiment -- conditions,
+// equipment, and training-requirements attach an existing lab lookup
+// row; grants attach an existing lab grant; principal-investigators
+// attach an existing lab member. All five share the same
+// list/add/remove shape AttachList.tsx renders generically.
+
+export function listExperimentConditions(experimentId: number): Promise<Condition[]> {
+  return apiFetch<Condition[]>(`/experiments/${experimentId}/conditions/`)
+}
+export function addExperimentCondition(experimentId: number, conditionId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/conditions/`, {
+    method: 'POST',
+    body: JSON.stringify({ condition_id: conditionId }),
+  })
+}
+export function removeExperimentCondition(experimentId: number, conditionId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/conditions/${conditionId}`, { method: 'DELETE' })
+}
+
+export function listExperimentEquipment(experimentId: number): Promise<Equipment[]> {
+  return apiFetch<Equipment[]>(`/experiments/${experimentId}/equipment/`)
+}
+export function addExperimentEquipment(experimentId: number, equipmentId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/equipment/`, {
+    method: 'POST',
+    body: JSON.stringify({ equipment_id: equipmentId }),
+  })
+}
+export function removeExperimentEquipment(experimentId: number, equipmentId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/equipment/${equipmentId}`, { method: 'DELETE' })
+}
+
+export function listExperimentTrainingRequirements(experimentId: number): Promise<ExperimentRole[]> {
+  return apiFetch<ExperimentRole[]>(`/experiments/${experimentId}/training-requirements/`)
+}
+export function addExperimentTrainingRequirement(experimentId: number, experimentRoleId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/training-requirements/`, {
+    method: 'POST',
+    body: JSON.stringify({ experiment_role_id: experimentRoleId }),
+  })
+}
+export function removeExperimentTrainingRequirement(experimentId: number, roleId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/training-requirements/${roleId}`, { method: 'DELETE' })
+}
+
+export function listExperimentGrants(experimentId: number): Promise<Grant[]> {
+  return apiFetch<Grant[]>(`/experiments/${experimentId}/grants/`)
+}
+export function addExperimentGrant(experimentId: number, grantId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/grants/`, {
+    method: 'POST',
+    body: JSON.stringify({ grant_id: grantId }),
+  })
+}
+export function removeExperimentGrant(experimentId: number, grantId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/grants/${grantId}`, { method: 'DELETE' })
+}
+
+export function listExperimentPrincipalInvestigators(experimentId: number): Promise<LabMember[]> {
+  return apiFetch<LabMember[]>(`/experiments/${experimentId}/principal-investigators/`)
+}
+export function addExperimentPrincipalInvestigator(experimentId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/principal-investigators/`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId }),
+  })
+}
+export function removeExperimentPrincipalInvestigator(experimentId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/experiments/${experimentId}/principal-investigators/${userId}`, { method: 'DELETE' })
+}

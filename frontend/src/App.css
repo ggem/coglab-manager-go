@@ -166,6 +166,13 @@ table {
   width: 100%;
 }
 
+caption {
+  text-align: left;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
 th,
 td {
   padding: 0.5rem 0.75rem;
@@ -265,7 +272,8 @@ td {
    since ChildForm alone has ~15 of them. */
 .family-fields form,
 .create-family form,
-.child-form {
+.child-form,
+.experiment-form {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
@@ -274,7 +282,8 @@ td {
 
 .family-fields form label,
 .create-family form label,
-.child-form label {
+.child-form label,
+.experiment-form label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -289,11 +298,26 @@ td {
 .create-family form select,
 .child-form input,
 .child-form select,
-.child-form textarea {
+.child-form textarea,
+.experiment-form input,
+.experiment-form select {
   padding: 0.4rem;
   border: 1px solid #ccc;
   border-radius: 4px;
   font: inherit;
+  min-width: 0;
+}
+
+/* The fixed 220px label width above works until the viewport is
+   narrower than a few fields side by side -- below that, stack each
+   field full-width instead of letting them overflow. */
+@media (max-width: 480px) {
+  .family-fields form label,
+  .create-family form label,
+  .child-form label,
+  .experiment-form label {
+    width: 100%;
+  }
 }
 
 .child-form textarea {
@@ -316,7 +340,8 @@ td {
   padding: 0 0.25rem;
 }
 
-.child-form .checkbox-label {
+.child-form .checkbox-label,
+.experiment-form .checkbox-label {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
@@ -324,7 +349,8 @@ td {
   font-size: 0.85rem;
 }
 
-.child-form button {
+.child-form button,
+.experiment-form button {
   align-self: flex-end;
   padding: 0.5rem 1rem;
   border: none;
@@ -386,4 +412,77 @@ td {
   border-radius: 4px;
   font: inherit;
   min-height: 3rem;
+}
+
+/* Five of these per ExperimentDetail page (conditions, equipment,
+   training requirements, grants, principal investigators) -- kept
+   compact since the page already has a lot on it. */
+.attach-list {
+  margin-bottom: 1.5rem;
+}
+
+.attach-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.attach-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.attach-list li button {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.8rem;
+}
+
+.attach-list form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-list select {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.attach-list form button {
+  padding: 0.4rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #2a5db0;
+  color: white;
+}
+
+.experiment-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.experiment-detail-header h2 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.experiment-detail-header button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
 }
