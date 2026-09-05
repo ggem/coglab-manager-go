@@ -466,3 +466,38 @@ export function updateZipCode(id: number, zipCode: string, priority: string): Pr
 export function deactivateZipCode(id: number): Promise<void> {
   return apiFetch<void>(`/zip-codes/${id}/deactivate`, { method: 'POST' })
 }
+
+export interface ExperimentType extends LookupRow {
+  name: string
+}
+
+export function listExperimentTypes(labId: number): Promise<ExperimentType[]> {
+  return apiFetch<ExperimentType[]>(`/labs/${labId}/experiment-types/`)
+}
+export function createExperimentType(labId: number, name: string): Promise<ExperimentType> {
+  return apiFetch<ExperimentType>(`/labs/${labId}/experiment-types/`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+export function updateExperimentType(id: number, name: string): Promise<ExperimentType> {
+  return apiFetch<ExperimentType>(`/experiment-types/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateExperimentType(id: number): Promise<void> {
+  return apiFetch<void>(`/experiment-types/${id}/deactivate`, { method: 'POST' })
+}
+
+// --- Lab members ---
+
+export interface LabMember {
+  id: number
+  first_name: string
+  last_name: string
+}
+
+// The candidate pool a picker (e.g. principal investigators) draws
+// from.
+export function getLabMembers(labId: number): Promise<LabMember[]> {
+  return apiFetch<LabMember[]>(`/labs/${labId}/members`)
+}
+

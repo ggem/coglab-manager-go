@@ -7,6 +7,7 @@ import {
   createConditionValue,
   createEquipment,
   createExperimentRole,
+  createExperimentType,
   createGrant,
   createProtocol,
   createZipCode,
@@ -14,6 +15,7 @@ import {
   deactivateConditionValue,
   deactivateEquipment,
   deactivateExperimentRole,
+  deactivateExperimentType,
   deactivateGrant,
   deactivateProtocol,
   deactivateZipCode,
@@ -22,6 +24,7 @@ import {
   listConditions,
   listEquipment,
   listExperimentRoles,
+  listExperimentTypes,
   listGrants,
   listProtocols,
   listZipCodes,
@@ -30,13 +33,14 @@ import {
   updateConditionValue,
   updateEquipment,
   updateExperimentRole,
+  updateExperimentType,
   updateGrant,
   updateProtocol,
   updateZipCode,
   type ExperimentRole,
 } from './api'
 
-type Tab = 'conditions' | 'equipment' | 'roles' | 'protocols' | 'grants' | 'zipcodes'
+type Tab = 'conditions' | 'equipment' | 'roles' | 'protocols' | 'grants' | 'zipcodes' | 'experimenttypes'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'conditions', label: 'Conditions' },
@@ -45,6 +49,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'protocols', label: 'Protocols' },
   { key: 'grants', label: 'Grants' },
   { key: 'zipcodes', label: 'Zip Codes' },
+  { key: 'experimenttypes', label: 'Experiment Types' },
 ]
 
 export default function LabSetup() {
@@ -132,6 +137,17 @@ export default function LabSetup() {
           create={(values) => createZipCode(id, values.zip_code, values.priority)}
           update={(rowId, values) => updateZipCode(rowId, values.zip_code, values.priority)}
           deactivate={(rowId) => deactivateZipCode(rowId)}
+        />
+      )}
+
+      {tab === 'experimenttypes' && (
+        <LookupTable
+          queryKey={['experiment-types', id]}
+          fields={[{ key: 'name', label: 'Name', type: 'text' }]}
+          list={() => listExperimentTypes(id)}
+          create={(values) => createExperimentType(id, values.name)}
+          update={(rowId, values) => updateExperimentType(rowId, values.name)}
+          deactivate={(rowId) => deactivateExperimentType(rowId)}
         />
       )}
     </div>

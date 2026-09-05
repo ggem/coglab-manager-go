@@ -114,6 +114,11 @@ func (s *Server) Routes() http.Handler {
 		// they're a member) are a separate, not-yet-built concern.
 		r.Route("/labs/{labID}", func(r chi.Router) {
 			r.Use(s.requireLabMemberFromURL)
+			r.Get("/members", s.handleListLabMembers)
+			r.Route("/experiment-types", func(r chi.Router) {
+				r.Post("/", s.handleCreateExperimentType)
+				r.Get("/", s.handleListExperimentTypesByLab)
+			})
 			r.Route("/conditions", func(r chi.Router) {
 				r.Post("/", s.handleCreateCondition)
 				r.Get("/", s.handleListConditionsByLab)
@@ -224,6 +229,12 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/", s.handleGetEquipment)
 			r.Put("/", s.handleUpdateEquipment)
 			r.Post("/deactivate", s.handleDeactivateEquipment)
+		})
+
+		r.Route("/experiment-types/{experimentTypeID}", func(r chi.Router) {
+			r.Use(s.requireLabMemberForExperimentType)
+			r.Put("/", s.handleUpdateExperimentType)
+			r.Post("/deactivate", s.handleDeactivateExperimentType)
 		})
 
 		r.Route("/experiment-roles/{roleID}", func(r chi.Router) {

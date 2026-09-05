@@ -21,6 +21,7 @@ const apiPaths = [
   '/condition-values',
   '/equipment',
   '/experiment-roles',
+  '/experiment-types',
   '/experiments',
   '/appointments',
   '/availability',

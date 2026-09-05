@@ -46,6 +46,24 @@ func (s *Server) requireLabMemberFromURL(next http.Handler) http.Handler {
 // via r.Use, they also cover any nested sub-routes under that resource
 // (e.g. a condition's /values, or an experiment's join-management routes).
 
+func (s *Server) requireLabMemberForExperimentType(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "experimentTypeID")
+		if !ok {
+			return
+		}
+		experimentType, err := s.queries.GetExperimentTypeByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabMember(w, r, experimentType.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) requireLabMemberForCondition(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := idParam(w, r, "conditionID")
