@@ -17,6 +17,7 @@ type Querier interface {
 	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error
 	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error
 	AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) error
+	AddExperimentPrincipalInvestigator(ctx context.Context, arg AddExperimentPrincipalInvestigatorParams) error
 	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error
 	AddLabMemberTraining(ctx context.Context, arg AddLabMemberTrainingParams) error
 	// Only a scheduled ('pending') appointment can arrive -- an unscheduled
@@ -33,6 +34,7 @@ type Querier interface {
 	CreateEquipment(ctx context.Context, arg CreateEquipmentParams) (Equipment, error)
 	CreateExperiment(ctx context.Context, arg CreateExperimentParams) (Experiment, error)
 	CreateExperimentRole(ctx context.Context, arg CreateExperimentRoleParams) (ExperimentRole, error)
+	CreateExperimentType(ctx context.Context, arg CreateExperimentTypeParams) (ExperimentType, error)
 	CreateFamily(ctx context.Context, arg CreateFamilyParams) (Family, error)
 	CreateGrant(ctx context.Context, arg CreateGrantParams) (Grant, error)
 	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
@@ -52,6 +54,7 @@ type Querier interface {
 	DeactivateEquipment(ctx context.Context, id int64) error
 	DeactivateExperiment(ctx context.Context, id int64) error
 	DeactivateExperimentRole(ctx context.Context, id int64) error
+	DeactivateExperimentType(ctx context.Context, id int64) error
 	DeactivateGrant(ctx context.Context, id int64) error
 	DeactivateGuardian(ctx context.Context, id int64) error
 	DeactivateLabAvailabilityGeneral(ctx context.Context, id int64) error
@@ -78,6 +81,7 @@ type Querier interface {
 	GetEquipmentByID(ctx context.Context, id int64) (Equipment, error)
 	GetExperimentByID(ctx context.Context, id int64) (Experiment, error)
 	GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error)
+	GetExperimentTypeByID(ctx context.Context, id int64) (ExperimentType, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGrantByID(ctx context.Context, id int64) (Grant, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
@@ -158,8 +162,10 @@ type Querier interface {
 	ListExperimentConditions(ctx context.Context, experimentID int64) ([]Condition, error)
 	ListExperimentEquipment(ctx context.Context, experimentID int64) ([]Equipment, error)
 	ListExperimentGrants(ctx context.Context, experimentID int64) ([]Grant, error)
+	ListExperimentPrincipalInvestigators(ctx context.Context, experimentID int64) ([]User, error)
 	ListExperimentRolesByLab(ctx context.Context, labID int64) ([]ExperimentRole, error)
 	ListExperimentTrainingRequirements(ctx context.Context, experimentID int64) ([]ExperimentRole, error)
+	ListExperimentTypesByLab(ctx context.Context, labID int64) ([]ExperimentType, error)
 	ListExperimentsByLab(ctx context.Context, labID int64) ([]Experiment, error)
 	ListGrantsByLab(ctx context.Context, labID int64) ([]Grant, error)
 	ListGuardiansByFamily(ctx context.Context, familyID int64) ([]Guardian, error)
@@ -180,6 +186,10 @@ type Querier interface {
 	// the scheduling search's backtracking draws from for that role.
 	ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]User, error)
 	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
+	// The candidate pool a picker (e.g. principal investigators) draws
+	// from -- full User rows, same "select users.*, filter deactivated"
+	// shape as ListLabMemberTrainingsForRole.
+	ListLabMembers(ctx context.Context, labID int64) ([]User, error)
 	ListLabsForUser(ctx context.Context, userID int64) ([]Lab, error)
 	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
@@ -224,6 +234,7 @@ type Querier interface {
 	RemoveExperimentCondition(ctx context.Context, arg RemoveExperimentConditionParams) error
 	RemoveExperimentEquipment(ctx context.Context, arg RemoveExperimentEquipmentParams) error
 	RemoveExperimentGrant(ctx context.Context, arg RemoveExperimentGrantParams) error
+	RemoveExperimentPrincipalInvestigator(ctx context.Context, arg RemoveExperimentPrincipalInvestigatorParams) error
 	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error
 	RemoveLabMemberTraining(ctx context.Context, arg RemoveLabMemberTrainingParams) error
 	RevokeSession(ctx context.Context, tokenHash []byte) error
@@ -272,6 +283,7 @@ type Querier interface {
 	UpdateEquipment(ctx context.Context, arg UpdateEquipmentParams) (Equipment, error)
 	UpdateExperiment(ctx context.Context, arg UpdateExperimentParams) (Experiment, error)
 	UpdateExperimentRole(ctx context.Context, arg UpdateExperimentRoleParams) (ExperimentRole, error)
+	UpdateExperimentType(ctx context.Context, arg UpdateExperimentTypeParams) (ExperimentType, error)
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
 	UpdateGrant(ctx context.Context, arg UpdateGrantParams) (Grant, error)
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)

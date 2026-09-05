@@ -124,6 +124,7 @@ type Experiment struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ProtocolID         *int64             `json:"protocol_id"`
+	ExperimentTypeID   *int64             `json:"experiment_type_id"`
 }
 
 type ExperimentCondition struct {
@@ -141,6 +142,11 @@ type ExperimentGrant struct {
 	GrantID      int64 `json:"grant_id"`
 }
 
+type ExperimentPrincipalInvestigator struct {
+	ExperimentID int64 `json:"experiment_id"`
+	UserID       int64 `json:"user_id"`
+}
+
 type ExperimentRole struct {
 	ID            int64              `json:"id"`
 	LabID         int64              `json:"lab_id"`
@@ -154,6 +160,15 @@ type ExperimentRole struct {
 type ExperimentTrainingRequirement struct {
 	ExperimentID     int64 `json:"experiment_id"`
 	ExperimentRoleID int64 `json:"experiment_role_id"`
+}
+
+type ExperimentType struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Family struct {

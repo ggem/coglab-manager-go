@@ -55,18 +55,26 @@ type Querier struct {
 	UpdateExperimentFunc     func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error)
 	DeactivateExperimentFunc func(ctx context.Context, id int64) error
 
-	AddExperimentConditionFunc              func(ctx context.Context, arg db.AddExperimentConditionParams) error
-	RemoveExperimentConditionFunc           func(ctx context.Context, arg db.RemoveExperimentConditionParams) error
-	ListExperimentConditionsFunc            func(ctx context.Context, experimentID int64) ([]db.Condition, error)
-	AddExperimentEquipmentFunc              func(ctx context.Context, arg db.AddExperimentEquipmentParams) error
-	RemoveExperimentEquipmentFunc           func(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error
-	ListExperimentEquipmentFunc             func(ctx context.Context, experimentID int64) ([]db.Equipment, error)
-	AddExperimentTrainingRequirementFunc    func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error
-	RemoveExperimentTrainingRequirementFunc func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error
-	ListExperimentTrainingRequirementsFunc  func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error)
-	AddExperimentGrantFunc                  func(ctx context.Context, arg db.AddExperimentGrantParams) error
-	RemoveExperimentGrantFunc               func(ctx context.Context, arg db.RemoveExperimentGrantParams) error
-	ListExperimentGrantsFunc                func(ctx context.Context, experimentID int64) ([]db.Grant, error)
+	AddExperimentConditionFunc                func(ctx context.Context, arg db.AddExperimentConditionParams) error
+	RemoveExperimentConditionFunc             func(ctx context.Context, arg db.RemoveExperimentConditionParams) error
+	ListExperimentConditionsFunc              func(ctx context.Context, experimentID int64) ([]db.Condition, error)
+	AddExperimentEquipmentFunc                func(ctx context.Context, arg db.AddExperimentEquipmentParams) error
+	RemoveExperimentEquipmentFunc             func(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error
+	ListExperimentEquipmentFunc               func(ctx context.Context, experimentID int64) ([]db.Equipment, error)
+	AddExperimentTrainingRequirementFunc      func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error
+	RemoveExperimentTrainingRequirementFunc   func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error
+	ListExperimentTrainingRequirementsFunc    func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error)
+	AddExperimentGrantFunc                    func(ctx context.Context, arg db.AddExperimentGrantParams) error
+	RemoveExperimentGrantFunc                 func(ctx context.Context, arg db.RemoveExperimentGrantParams) error
+	ListExperimentGrantsFunc                  func(ctx context.Context, experimentID int64) ([]db.Grant, error)
+	AddExperimentPrincipalInvestigatorFunc    func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error
+	RemoveExperimentPrincipalInvestigatorFunc func(ctx context.Context, arg db.RemoveExperimentPrincipalInvestigatorParams) error
+	ListExperimentPrincipalInvestigatorsFunc  func(ctx context.Context, experimentID int64) ([]db.User, error)
+	CreateExperimentTypeFunc                  func(ctx context.Context, arg db.CreateExperimentTypeParams) (db.ExperimentType, error)
+	GetExperimentTypeByIDFunc                 func(ctx context.Context, id int64) (db.ExperimentType, error)
+	ListExperimentTypesByLabFunc              func(ctx context.Context, labID int64) ([]db.ExperimentType, error)
+	UpdateExperimentTypeFunc                  func(ctx context.Context, arg db.UpdateExperimentTypeParams) (db.ExperimentType, error)
+	DeactivateExperimentTypeFunc              func(ctx context.Context, id int64) error
 
 	CreateProtocolFunc     func(ctx context.Context, arg db.CreateProtocolParams) (db.Protocol, error)
 	GetProtocolByIDFunc    func(ctx context.Context, id int64) (db.Protocol, error)
@@ -123,6 +131,7 @@ type Querier struct {
 
 	GetLabMembershipFunc func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
 	ListLabsForUserFunc  func(ctx context.Context, userID int64) ([]db.Lab, error)
+	ListLabMembersFunc   func(ctx context.Context, labID int64) ([]db.User, error)
 
 	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
 	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
@@ -486,6 +495,62 @@ func (q *Querier) ListExperimentGrants(ctx context.Context, experimentID int64) 
 	return q.ListExperimentGrantsFunc(ctx, experimentID)
 }
 
+func (q *Querier) AddExperimentPrincipalInvestigator(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
+	if q.AddExperimentPrincipalInvestigatorFunc == nil {
+		panic("dbfake: AddExperimentPrincipalInvestigator not implemented")
+	}
+	return q.AddExperimentPrincipalInvestigatorFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveExperimentPrincipalInvestigator(ctx context.Context, arg db.RemoveExperimentPrincipalInvestigatorParams) error {
+	if q.RemoveExperimentPrincipalInvestigatorFunc == nil {
+		panic("dbfake: RemoveExperimentPrincipalInvestigator not implemented")
+	}
+	return q.RemoveExperimentPrincipalInvestigatorFunc(ctx, arg)
+}
+
+func (q *Querier) ListExperimentPrincipalInvestigators(ctx context.Context, experimentID int64) ([]db.User, error) {
+	if q.ListExperimentPrincipalInvestigatorsFunc == nil {
+		panic("dbfake: ListExperimentPrincipalInvestigators not implemented")
+	}
+	return q.ListExperimentPrincipalInvestigatorsFunc(ctx, experimentID)
+}
+
+func (q *Querier) CreateExperimentType(ctx context.Context, arg db.CreateExperimentTypeParams) (db.ExperimentType, error) {
+	if q.CreateExperimentTypeFunc == nil {
+		panic("dbfake: CreateExperimentType not implemented")
+	}
+	return q.CreateExperimentTypeFunc(ctx, arg)
+}
+
+func (q *Querier) GetExperimentTypeByID(ctx context.Context, id int64) (db.ExperimentType, error) {
+	if q.GetExperimentTypeByIDFunc == nil {
+		panic("dbfake: GetExperimentTypeByID not implemented")
+	}
+	return q.GetExperimentTypeByIDFunc(ctx, id)
+}
+
+func (q *Querier) ListExperimentTypesByLab(ctx context.Context, labID int64) ([]db.ExperimentType, error) {
+	if q.ListExperimentTypesByLabFunc == nil {
+		panic("dbfake: ListExperimentTypesByLab not implemented")
+	}
+	return q.ListExperimentTypesByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateExperimentType(ctx context.Context, arg db.UpdateExperimentTypeParams) (db.ExperimentType, error) {
+	if q.UpdateExperimentTypeFunc == nil {
+		panic("dbfake: UpdateExperimentType not implemented")
+	}
+	return q.UpdateExperimentTypeFunc(ctx, arg)
+}
+
+func (q *Querier) DeactivateExperimentType(ctx context.Context, id int64) error {
+	if q.DeactivateExperimentTypeFunc == nil {
+		panic("dbfake: DeactivateExperimentType not implemented")
+	}
+	return q.DeactivateExperimentTypeFunc(ctx, id)
+}
+
 func (q *Querier) CreateProtocol(ctx context.Context, arg db.CreateProtocolParams) (db.Protocol, error) {
 	if q.CreateProtocolFunc == nil {
 		panic("dbfake: CreateProtocol not implemented")
@@ -715,6 +780,13 @@ func (q *Querier) ListLabsForUser(ctx context.Context, userID int64) ([]db.Lab, 
 		panic("dbfake: ListLabsForUser not implemented")
 	}
 	return q.ListLabsForUserFunc(ctx, userID)
+}
+
+func (q *Querier) ListLabMembers(ctx context.Context, labID int64) ([]db.User, error) {
+	if q.ListLabMembersFunc == nil {
+		panic("dbfake: ListLabMembers not implemented")
+	}
+	return q.ListLabMembersFunc(ctx, labID)
 }
 
 func (q *Querier) ListConditionsByLab(ctx context.Context, labID int64) ([]db.Condition, error) {

@@ -2,7 +2,7 @@
 insert into experiments (
     lab_id, name, description, sessions, age_range_min_months, age_range_max_months,
     start_date, end_date, status, duration_minutes, filter_premies,
-    filter_min_languages, filter_languages, protocol_id
+    filter_min_languages, filter_languages, protocol_id, experiment_type_id
 ) values (
     sqlc.arg(lab_id),
     sqlc.arg(name),
@@ -17,7 +17,8 @@ insert into experiments (
     sqlc.arg(filter_premies),
     sqlc.arg(filter_min_languages),
     sqlc.arg(filter_languages),
-    sqlc.narg(protocol_id)
+    sqlc.narg(protocol_id),
+    sqlc.narg(experiment_type_id)
 )
 returning *;
 
@@ -41,7 +42,8 @@ update experiments set
     filter_premies = sqlc.arg(filter_premies),
     filter_min_languages = sqlc.arg(filter_min_languages),
     filter_languages = sqlc.arg(filter_languages),
-    protocol_id = sqlc.narg(protocol_id)
+    protocol_id = sqlc.narg(protocol_id),
+    experiment_type_id = sqlc.narg(experiment_type_id)
 where id = sqlc.arg(id)
 returning *;
 
@@ -108,3 +110,18 @@ select grants.* from grants
 join experiment_grants on experiment_grants.grant_id = grants.id
 where experiment_grants.experiment_id = sqlc.arg(experiment_id)
 order by grants.id;
+
+-- name: AddExperimentPrincipalInvestigator :exec
+insert into experiment_principal_investigators (experiment_id, user_id)
+values (sqlc.arg(experiment_id), sqlc.arg(user_id));
+
+-- name: RemoveExperimentPrincipalInvestigator :exec
+delete from experiment_principal_investigators
+where experiment_id = sqlc.arg(experiment_id) and user_id = sqlc.arg(user_id);
+
+-- name: ListExperimentPrincipalInvestigators :many
+select users.* from users
+join experiment_principal_investigators
+    on experiment_principal_investigators.user_id = users.id
+where experiment_principal_investigators.experiment_id = sqlc.arg(experiment_id)
+order by users.last_name, users.first_name;

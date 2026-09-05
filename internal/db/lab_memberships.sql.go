@@ -32,6 +32,47 @@ func (q *Queries) GetLabMembership(ctx context.Context, arg GetLabMembershipPara
 	return i, err
 }
 
+const listLabMembers = `-- name: ListLabMembers :many
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+join lab_memberships on lab_memberships.user_id = users.id
+where lab_memberships.lab_id = $1
+  and users.deactivated_at is null
+order by users.last_name, users.first_name
+`
+
+// The candidate pool a picker (e.g. principal investigators) draws
+// from -- full User rows, same "select users.*, filter deactivated"
+// shape as ListLabMemberTrainingsForRole.
+func (q *Queries) ListLabMembers(ctx context.Context, labID int64) ([]User, error) {
+	rows, err := q.db.Query(ctx, listLabMembers, labID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.PasswordHash,
+			&i.IsPlatformAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeactivatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLabsForUser = `-- name: ListLabsForUser :many
 select labs.id, labs.name, labs.short_name, labs.created_at, labs.updated_at from labs
 join lab_memberships on lab_memberships.lab_id = labs.id
