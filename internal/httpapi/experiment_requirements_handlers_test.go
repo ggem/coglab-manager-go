@@ -546,3 +546,136 @@ func TestHandleListExperimentGrants_UnexpectedDBError(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
+
+func TestHandleAddExperimentPrincipalInvestigator_Success(t *testing.T) {
+	var captured db.AddExperimentPrincipalInvestigatorParams
+	var capturedAudit db.CreateAuditEventParams
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
+			captured = arg
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			capturedAudit = arg
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/principal-investigators/", cookie, addPrincipalInvestigatorRequest{UserID: 5})
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ExperimentID != 3 || captured.UserID != 5 {
+		t.Errorf("AddExperimentPrincipalInvestigator params = %+v", captured)
+	}
+	if capturedAudit.Action != ActionExperimentPrincipalInvestigatorAdded {
+		t.Errorf("audit action = %q, want %q", capturedAudit.Action, ActionExperimentPrincipalInvestigatorAdded)
+	}
+}
+
+func TestHandleAddExperimentPrincipalInvestigator_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
+			return assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/principal-investigators/", cookie, addPrincipalInvestigatorRequest{UserID: 5})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleRemoveExperimentPrincipalInvestigator_Success(t *testing.T) {
+	var captured db.RemoveExperimentPrincipalInvestigatorParams
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		RemoveExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.RemoveExperimentPrincipalInvestigatorParams) error {
+			captured = arg
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/principal-investigators/5", cookie, nil)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ExperimentID != 3 || captured.UserID != 5 {
+		t.Errorf("RemoveExperimentPrincipalInvestigator params = %+v", captured)
+	}
+}
+
+func TestHandleRemoveExperimentPrincipalInvestigator_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		RemoveExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.RemoveExperimentPrincipalInvestigatorParams) error {
+			return assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodDelete, "/experiments/3/principal-investigators/5", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleListExperimentPrincipalInvestigators_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		ListExperimentPrincipalInvestigatorsFunc: func(ctx context.Context, experimentID int64) ([]db.User, error) {
+			return []db.User{{ID: 5, FirstName: "Pat", LastName: "Lee"}}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/experiments/3/principal-investigators/", cookie, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[[]trainedMemberResponse](t, rec)
+	if len(got) != 1 || got[0].FirstName != "Pat" {
+		t.Errorf("response = %+v", got)
+	}
+}
+
+func TestHandleListExperimentPrincipalInvestigators_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		ListExperimentPrincipalInvestigatorsFunc: func(ctx context.Context, experimentID int64) ([]db.User, error) {
+			return nil, assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/experiments/3/principal-investigators/", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}

@@ -30,6 +30,13 @@ type experimentRequest struct {
 	FilterMinLanguages int16    `json:"filter_min_languages"`
 	FilterLanguages    []string `json:"filter_languages"`
 	ProtocolID         *int64   `json:"protocol_id"`
+	ExperimentTypeID   *int64   `json:"experiment_type_id"`
+	// CreateExperimenterRole is create-only, not persisted on the
+	// experiment itself: if set, handleCreateExperiment also creates a
+	// dedicated "<name> Experimenter" role and attaches it as a
+	// training requirement, opt-in rather than legacy's silent always-on
+	// behavior.
+	CreateExperimenterRole bool `json:"create_experimenter_role"`
 }
 
 type experimentResponse struct {
@@ -48,6 +55,7 @@ type experimentResponse struct {
 	FilterMinLanguages int16     `json:"filter_min_languages"`
 	FilterLanguages    []string  `json:"filter_languages"`
 	ProtocolID         *int64    `json:"protocol_id"`
+	ExperimentTypeID   *int64    `json:"experiment_type_id"`
 	Deactivated        bool      `json:"deactivated"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
@@ -70,6 +78,7 @@ func experimentToResponse(e db.Experiment) experimentResponse {
 		FilterMinLanguages: e.FilterMinLanguages,
 		FilterLanguages:    e.FilterLanguages,
 		ProtocolID:         e.ProtocolID,
+		ExperimentTypeID:   e.ExperimentTypeID,
 		Deactivated:        e.DeactivatedAt.Valid,
 		CreatedAt:          e.CreatedAt.Time,
 		UpdatedAt:          e.UpdatedAt.Time,
@@ -108,6 +117,7 @@ func (s *Server) handleCreateExperiment(w http.ResponseWriter, r *http.Request) 
 		FilterMinLanguages: req.FilterMinLanguages,
 		FilterLanguages:    nonNilSlice(req.FilterLanguages),
 		ProtocolID:         req.ProtocolID,
+		ExperimentTypeID:   req.ExperimentTypeID,
 	})
 	if err != nil {
 		s.writeDBError(w, err)
@@ -121,6 +131,32 @@ func (s *Server) handleCreateExperiment(w http.ResponseWriter, r *http.Request) 
 		EntityType:  ptr("experiment"),
 		EntityID:    &experiment.ID,
 	})
+
+	if req.CreateExperimenterRole {
+		role, err := s.queries.CreateExperimentRole(r.Context(), db.CreateExperimentRoleParams{
+			LabID: experiment.LabID,
+			Name:  experiment.Name + " Experimenter",
+		})
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if err := s.queries.AddExperimentTrainingRequirement(r.Context(), db.AddExperimentTrainingRequirementParams{
+			ExperimentID:     experiment.ID,
+			ExperimentRoleID: role.ID,
+		}); err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		s.recordAuditEvent(r, audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			LabID:       &experiment.LabID,
+			Action:      ActionExperimentRoleCreated,
+			EntityType:  ptr("experiment_role"),
+			EntityID:    &role.ID,
+			Metadata:    map[string]int64{"experiment_id": experiment.ID},
+		})
+	}
 
 	writeJSON(w, http.StatusCreated, experimentToResponse(experiment))
 }
@@ -191,6 +227,7 @@ func (s *Server) handleUpdateExperiment(w http.ResponseWriter, r *http.Request) 
 		FilterMinLanguages: req.FilterMinLanguages,
 		FilterLanguages:    nonNilSlice(req.FilterLanguages),
 		ProtocolID:         req.ProtocolID,
+		ExperimentTypeID:   req.ExperimentTypeID,
 	})
 	if err != nil {
 		s.writeDBError(w, err)

@@ -60,6 +60,66 @@ func TestHandleCreateExperiment_Success(t *testing.T) {
 	}
 }
 
+func TestHandleCreateExperiment_WithExperimenterRole(t *testing.T) {
+	var createdRole db.CreateExperimentRoleParams
+	var addedRequirement db.AddExperimentTrainingRequirementParams
+	q := &dbfake.Querier{
+		CreateExperimentFunc: func(ctx context.Context, arg db.CreateExperimentParams) (db.Experiment, error) {
+			return db.Experiment{ID: 3, LabID: arg.LabID, Name: arg.Name, Status: arg.Status}, nil
+		},
+		CreateExperimentRoleFunc: func(ctx context.Context, arg db.CreateExperimentRoleParams) (db.ExperimentRole, error) {
+			createdRole = arg
+			return db.ExperimentRole{ID: 11, LabID: arg.LabID, Name: arg.Name}, nil
+		},
+		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
+			addedRequirement = arg
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/labs/9/experiments/", cookie, experimentRequest{
+		Name: "Looking Time Study", Status: "not_run", CreateExperimenterRole: true,
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body)
+	}
+	if createdRole.LabID != 9 || createdRole.Name != "Looking Time Study Experimenter" {
+		t.Errorf("CreateExperimentRole params = %+v", createdRole)
+	}
+	if addedRequirement.ExperimentID != 3 || addedRequirement.ExperimentRoleID != 11 {
+		t.Errorf("AddExperimentTrainingRequirement params = %+v", addedRequirement)
+	}
+}
+
+func TestHandleCreateExperiment_WithoutExperimenterRole(t *testing.T) {
+	q := &dbfake.Querier{
+		CreateExperimentFunc: func(ctx context.Context, arg db.CreateExperimentParams) (db.Experiment, error) {
+			return db.Experiment{ID: 3, LabID: arg.LabID, Name: arg.Name, Status: arg.Status}, nil
+		},
+		CreateExperimentRoleFunc: func(ctx context.Context, arg db.CreateExperimentRoleParams) (db.ExperimentRole, error) {
+			t.Fatal("CreateExperimentRole should not be called when create_experimenter_role is false")
+			return db.ExperimentRole{}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/labs/9/experiments/", cookie, experimentRequest{
+		Name: "Looking Time Study", Status: "not_run",
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body)
+	}
+}
+
 func TestHandleCreateExperiment_InvalidStartDate(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
 

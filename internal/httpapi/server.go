@@ -278,6 +278,11 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/", s.handleListExperimentGrants)
 				r.Delete("/{grantID}", s.handleRemoveExperimentGrant)
 			})
+			r.Route("/principal-investigators", func(r chi.Router) {
+				r.Post("/", s.handleAddExperimentPrincipalInvestigator)
+				r.Get("/", s.handleListExperimentPrincipalInvestigators)
+				r.Delete("/{userID}", s.handleRemoveExperimentPrincipalInvestigator)
+			})
 			r.Get("/reports/demographics", s.handleDemographicsReport)
 		})
 

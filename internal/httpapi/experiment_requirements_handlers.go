@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	ActionExperimentConditionAdded             = "experiment_condition.added"
-	ActionExperimentConditionRemoved           = "experiment_condition.removed"
-	ActionExperimentEquipmentAdded             = "experiment_equipment.added"
-	ActionExperimentEquipmentRemoved           = "experiment_equipment.removed"
-	ActionExperimentTrainingRequirementAdded   = "experiment_training_requirement.added"
-	ActionExperimentTrainingRequirementRemoved = "experiment_training_requirement.removed"
-	ActionExperimentGrantAdded                 = "experiment_grant.added"
-	ActionExperimentGrantRemoved               = "experiment_grant.removed"
+	ActionExperimentConditionAdded               = "experiment_condition.added"
+	ActionExperimentConditionRemoved             = "experiment_condition.removed"
+	ActionExperimentEquipmentAdded               = "experiment_equipment.added"
+	ActionExperimentEquipmentRemoved             = "experiment_equipment.removed"
+	ActionExperimentTrainingRequirementAdded     = "experiment_training_requirement.added"
+	ActionExperimentTrainingRequirementRemoved   = "experiment_training_requirement.removed"
+	ActionExperimentGrantAdded                   = "experiment_grant.added"
+	ActionExperimentGrantRemoved                 = "experiment_grant.removed"
+	ActionExperimentPrincipalInvestigatorAdded   = "experiment_principal_investigator.added"
+	ActionExperimentPrincipalInvestigatorRemoved = "experiment_principal_investigator.removed"
 )
 
 type addConditionRequest struct {
@@ -346,6 +348,89 @@ func (s *Server) handleListExperimentGrants(w http.ResponseWriter, r *http.Reque
 	resp := make([]grantResponse, len(grants))
 	for i, g := range grants {
 		resp[i] = grantToResponse(g)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+type addPrincipalInvestigatorRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
+func (s *Server) handleAddExperimentPrincipalInvestigator(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+
+	var req addPrincipalInvestigatorRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := s.queries.AddExperimentPrincipalInvestigator(r.Context(), db.AddExperimentPrincipalInvestigatorParams{
+		ExperimentID: experimentID,
+		UserID:       req.UserID,
+	}); err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionExperimentPrincipalInvestigatorAdded,
+		EntityType:  ptr("experiment"),
+		EntityID:    &experimentID,
+		Metadata:    map[string]int64{"user_id": req.UserID},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRemoveExperimentPrincipalInvestigator(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+	userID, ok := idParam(w, r, "userID")
+	if !ok {
+		return
+	}
+
+	if err := s.queries.RemoveExperimentPrincipalInvestigator(r.Context(), db.RemoveExperimentPrincipalInvestigatorParams{
+		ExperimentID: experimentID,
+		UserID:       userID,
+	}); err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionExperimentPrincipalInvestigatorRemoved,
+		EntityType:  ptr("experiment"),
+		EntityID:    &experimentID,
+		Metadata:    map[string]int64{"user_id": userID},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListExperimentPrincipalInvestigators(w http.ResponseWriter, r *http.Request) {
+	experimentID, ok := idParam(w, r, "experimentID")
+	if !ok {
+		return
+	}
+
+	users, err := s.queries.ListExperimentPrincipalInvestigators(r.Context(), experimentID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]trainedMemberResponse, len(users))
+	for i, u := range users {
+		resp[i] = trainedMemberResponse{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
