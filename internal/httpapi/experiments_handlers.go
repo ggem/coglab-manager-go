@@ -102,53 +102,70 @@ func (s *Server) handleCreateExperiment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	experiment, err := s.queries.CreateExperiment(r.Context(), db.CreateExperimentParams{
-		LabID:              labID,
-		Name:               req.Name,
-		Description:        req.Description,
-		Sessions:           req.Sessions,
-		AgeRangeMinMonths:  ageMin,
-		AgeRangeMaxMonths:  ageMax,
-		StartDate:          startDate,
-		EndDate:            endDate,
-		Status:             req.Status,
-		DurationMinutes:    req.DurationMinutes,
-		FilterPremies:      req.FilterPremies,
-		FilterMinLanguages: req.FilterMinLanguages,
-		FilterLanguages:    nonNilSlice(req.FilterLanguages),
-		ProtocolID:         req.ProtocolID,
-		ExperimentTypeID:   req.ExperimentTypeID,
-	})
-	if err != nil {
-		s.writeDBError(w, err)
+	if !s.validateExperimentForeignKeys(w, r, labID, req) {
 		return
 	}
 
-	s.recordAuditEvent(r, audit.Event{
-		ActorUserID: currentUserID(r.Context()),
-		LabID:       &experiment.LabID,
-		Action:      ActionExperimentCreated,
-		EntityType:  ptr("experiment"),
-		EntityID:    &experiment.ID,
-	})
+	// The experiment, its optional dedicated role, the training
+	// requirement attaching that role, and both audit events all run in
+	// one transaction: without this, a failure partway through (e.g. the
+	// training-requirement insert) left a real experiment committed while
+	// the client saw a 500, with no way to tell from the audit trail that
+	// the role workflow never finished.
+	var experiment db.Experiment
+	var role db.ExperimentRole
+	txErr := s.withTx(r.Context(), func(q db.Querier) error {
+		var err error
+		experiment, err = q.CreateExperiment(r.Context(), db.CreateExperimentParams{
+			LabID:              labID,
+			Name:               req.Name,
+			Description:        req.Description,
+			Sessions:           req.Sessions,
+			AgeRangeMinMonths:  ageMin,
+			AgeRangeMaxMonths:  ageMax,
+			StartDate:          startDate,
+			EndDate:            endDate,
+			Status:             req.Status,
+			DurationMinutes:    req.DurationMinutes,
+			FilterPremies:      req.FilterPremies,
+			FilterMinLanguages: req.FilterMinLanguages,
+			FilterLanguages:    nonNilSlice(req.FilterLanguages),
+			ProtocolID:         req.ProtocolID,
+			ExperimentTypeID:   req.ExperimentTypeID,
+		})
+		if err != nil {
+			return err
+		}
 
-	if req.CreateExperimenterRole {
-		role, err := s.queries.CreateExperimentRole(r.Context(), db.CreateExperimentRoleParams{
+		recorder := audit.NewRecorder(q)
+		if err := recorder.Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			LabID:       &experiment.LabID,
+			Action:      ActionExperimentCreated,
+			EntityType:  ptr("experiment"),
+			EntityID:    &experiment.ID,
+		}); err != nil {
+			return err
+		}
+
+		if !req.CreateExperimenterRole {
+			return nil
+		}
+
+		role, err = q.CreateExperimentRole(r.Context(), db.CreateExperimentRoleParams{
 			LabID: experiment.LabID,
 			Name:  experiment.Name + " Experimenter",
 		})
 		if err != nil {
-			s.writeDBError(w, err)
-			return
+			return err
 		}
-		if err := s.queries.AddExperimentTrainingRequirement(r.Context(), db.AddExperimentTrainingRequirementParams{
+		if _, err := q.AddExperimentTrainingRequirement(r.Context(), db.AddExperimentTrainingRequirementParams{
 			ExperimentID:     experiment.ID,
 			ExperimentRoleID: role.ID,
 		}); err != nil {
-			s.writeDBError(w, err)
-			return
+			return err
 		}
-		s.recordAuditEvent(r, audit.Event{
+		return recorder.Record(r.Context(), audit.Event{
 			ActorUserID: currentUserID(r.Context()),
 			LabID:       &experiment.LabID,
 			Action:      ActionExperimentRoleCreated,
@@ -156,9 +173,45 @@ func (s *Server) handleCreateExperiment(w http.ResponseWriter, r *http.Request) 
 			EntityID:    &role.ID,
 			Metadata:    map[string]int64{"experiment_id": experiment.ID},
 		})
+	})
+	if txErr != nil {
+		s.writeDBError(w, txErr)
+		return
 	}
 
 	writeJSON(w, http.StatusCreated, experimentToResponse(experiment))
+}
+
+// validateExperimentForeignKeys confirms that req's optional protocol_id
+// and experiment_type_id, if set, belong to labID -- writing a 400 and
+// returning ok=false otherwise. The route-level lab-membership middleware
+// only checks the experiment's own lab, not whether these caller-supplied
+// ids belong to it, so without this a lab member could point an
+// experiment at another lab's protocol or type by guessing its id.
+func (s *Server) validateExperimentForeignKeys(w http.ResponseWriter, r *http.Request, labID int64, req experimentRequest) bool {
+	if req.ProtocolID != nil {
+		protocol, err := s.queries.GetProtocolByID(r.Context(), *req.ProtocolID)
+		if err != nil {
+			s.writeDBError(w, err)
+			return false
+		}
+		if protocol.LabID != labID {
+			writeError(w, http.StatusBadRequest, "protocol not found in lab")
+			return false
+		}
+	}
+	if req.ExperimentTypeID != nil {
+		experimentType, err := s.queries.GetExperimentTypeByID(r.Context(), *req.ExperimentTypeID)
+		if err != nil {
+			s.writeDBError(w, err)
+			return false
+		}
+		if experimentType.LabID != labID {
+			writeError(w, http.StatusBadRequest, "experiment type not found in lab")
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) handleGetExperiment(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +262,15 @@ func (s *Server) handleUpdateExperiment(w http.ResponseWriter, r *http.Request) 
 
 	ageMin, ageMax, startDate, endDate, ok := decodeExperimentFields(w, req)
 	if !ok {
+		return
+	}
+
+	existing, err := s.queries.GetExperimentByID(r.Context(), id)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+	if !s.validateExperimentForeignKeys(w, r, existing.LabID, req) {
 		return
 	}
 

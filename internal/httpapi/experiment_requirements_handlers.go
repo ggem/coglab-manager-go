@@ -36,11 +36,16 @@ func (s *Server) handleAddExperimentCondition(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := s.queries.AddExperimentCondition(r.Context(), db.AddExperimentConditionParams{
+	rows, err := s.queries.AddExperimentCondition(r.Context(), db.AddExperimentConditionParams{
 		ExperimentID: experimentID,
 		ConditionID:  req.ConditionID,
-	}); err != nil {
+	})
+	if err != nil {
 		s.writeDBError(w, err)
+		return
+	}
+	if rows == 0 {
+		writeError(w, http.StatusNotFound, "condition not found in lab")
 		return
 	}
 
@@ -119,11 +124,16 @@ func (s *Server) handleAddExperimentEquipment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := s.queries.AddExperimentEquipment(r.Context(), db.AddExperimentEquipmentParams{
+	rows, err := s.queries.AddExperimentEquipment(r.Context(), db.AddExperimentEquipmentParams{
 		ExperimentID: experimentID,
 		EquipmentID:  req.EquipmentID,
-	}); err != nil {
+	})
+	if err != nil {
 		s.writeDBError(w, err)
+		return
+	}
+	if rows == 0 {
+		writeError(w, http.StatusNotFound, "equipment not found in lab")
 		return
 	}
 
@@ -202,11 +212,16 @@ func (s *Server) handleAddExperimentTrainingRequirement(w http.ResponseWriter, r
 		return
 	}
 
-	if err := s.queries.AddExperimentTrainingRequirement(r.Context(), db.AddExperimentTrainingRequirementParams{
+	rows, err := s.queries.AddExperimentTrainingRequirement(r.Context(), db.AddExperimentTrainingRequirementParams{
 		ExperimentID:     experimentID,
 		ExperimentRoleID: req.ExperimentRoleID,
-	}); err != nil {
+	})
+	if err != nil {
 		s.writeDBError(w, err)
+		return
+	}
+	if rows == 0 {
+		writeError(w, http.StatusNotFound, "role not found in lab")
 		return
 	}
 
@@ -285,11 +300,16 @@ func (s *Server) handleAddExperimentGrant(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.queries.AddExperimentGrant(r.Context(), db.AddExperimentGrantParams{
+	rows, err := s.queries.AddExperimentGrant(r.Context(), db.AddExperimentGrantParams{
 		ExperimentID: experimentID,
 		GrantID:      req.GrantID,
-	}); err != nil {
+	})
+	if err != nil {
 		s.writeDBError(w, err)
+		return
+	}
+	if rows == 0 {
+		writeError(w, http.StatusNotFound, "grant not found in lab")
 		return
 	}
 
@@ -368,11 +388,16 @@ func (s *Server) handleAddExperimentPrincipalInvestigator(w http.ResponseWriter,
 		return
 	}
 
-	if err := s.queries.AddExperimentPrincipalInvestigator(r.Context(), db.AddExperimentPrincipalInvestigatorParams{
+	rows, err := s.queries.AddExperimentPrincipalInvestigator(r.Context(), db.AddExperimentPrincipalInvestigatorParams{
 		ExperimentID: experimentID,
 		UserID:       req.UserID,
-	}); err != nil {
+	})
+	if err != nil {
 		s.writeDBError(w, err)
+		return
+	}
+	if rows == 0 {
+		writeError(w, http.StatusNotFound, "user not found in lab")
 		return
 	}
 

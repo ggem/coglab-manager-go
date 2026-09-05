@@ -11,10 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addExperimentCondition = `-- name: AddExperimentCondition :exec
+const addExperimentCondition = `-- name: AddExperimentCondition :execrows
 
 insert into experiment_conditions (experiment_id, condition_id)
-values ($1, $2)
+select $1, $2
+where exists (
+    select 1 from experiments e
+    join conditions c on c.lab_id = e.lab_id
+    where e.id = $1 and c.id = $2
+)
 `
 
 type AddExperimentConditionParams struct {
@@ -25,14 +30,32 @@ type AddExperimentConditionParams struct {
 // Join management: conditions, equipment, and training-role requirements
 // for an experiment. Each List query joins back to the lookup table so
 // callers get full rows (name, etc.) in one query instead of N+1 lookups.
-func (q *Queries) AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error {
-	_, err := q.db.Exec(ctx, addExperimentCondition, arg.ExperimentID, arg.ConditionID)
-	return err
+//
+// Each Add* query below is an insert...select gated on an exists check
+// that the target row belongs to the same lab as the experiment --
+// request authorization (requireLabMemberForExperiment) only checks the
+// experiment's own lab, not whether the attached id belongs to it, so
+// without this a lab member could attach another lab's condition/
+// equipment/role/grant/user by guessing its id. :execrows lets the
+// handler tell "attached" (1 row) apart from "cross-lab or unknown id"
+// (0 rows, since the insert then has nothing to select) without a
+// separate existence query.
+func (q *Queries) AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addExperimentCondition, arg.ExperimentID, arg.ConditionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const addExperimentEquipment = `-- name: AddExperimentEquipment :exec
+const addExperimentEquipment = `-- name: AddExperimentEquipment :execrows
 insert into experiment_equipment_requirements (experiment_id, equipment_id)
-values ($1, $2)
+select $1, $2
+where exists (
+    select 1 from experiments e
+    join equipment eq on eq.lab_id = e.lab_id
+    where e.id = $1 and eq.id = $2
+)
 `
 
 type AddExperimentEquipmentParams struct {
@@ -40,14 +63,22 @@ type AddExperimentEquipmentParams struct {
 	EquipmentID  int64 `json:"equipment_id"`
 }
 
-func (q *Queries) AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error {
-	_, err := q.db.Exec(ctx, addExperimentEquipment, arg.ExperimentID, arg.EquipmentID)
-	return err
+func (q *Queries) AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addExperimentEquipment, arg.ExperimentID, arg.EquipmentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const addExperimentGrant = `-- name: AddExperimentGrant :exec
+const addExperimentGrant = `-- name: AddExperimentGrant :execrows
 insert into experiment_grants (experiment_id, grant_id)
-values ($1, $2)
+select $1, $2
+where exists (
+    select 1 from experiments e
+    join grants g on g.lab_id = e.lab_id
+    where e.id = $1 and g.id = $2
+)
 `
 
 type AddExperimentGrantParams struct {
@@ -55,14 +86,22 @@ type AddExperimentGrantParams struct {
 	GrantID      int64 `json:"grant_id"`
 }
 
-func (q *Queries) AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) error {
-	_, err := q.db.Exec(ctx, addExperimentGrant, arg.ExperimentID, arg.GrantID)
-	return err
+func (q *Queries) AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addExperimentGrant, arg.ExperimentID, arg.GrantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const addExperimentPrincipalInvestigator = `-- name: AddExperimentPrincipalInvestigator :exec
+const addExperimentPrincipalInvestigator = `-- name: AddExperimentPrincipalInvestigator :execrows
 insert into experiment_principal_investigators (experiment_id, user_id)
-values ($1, $2)
+select $1, $2
+where exists (
+    select 1 from experiments e
+    join lab_memberships lm on lm.lab_id = e.lab_id
+    where e.id = $1 and lm.user_id = $2
+)
 `
 
 type AddExperimentPrincipalInvestigatorParams struct {
@@ -70,14 +109,22 @@ type AddExperimentPrincipalInvestigatorParams struct {
 	UserID       int64 `json:"user_id"`
 }
 
-func (q *Queries) AddExperimentPrincipalInvestigator(ctx context.Context, arg AddExperimentPrincipalInvestigatorParams) error {
-	_, err := q.db.Exec(ctx, addExperimentPrincipalInvestigator, arg.ExperimentID, arg.UserID)
-	return err
+func (q *Queries) AddExperimentPrincipalInvestigator(ctx context.Context, arg AddExperimentPrincipalInvestigatorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addExperimentPrincipalInvestigator, arg.ExperimentID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const addExperimentTrainingRequirement = `-- name: AddExperimentTrainingRequirement :exec
+const addExperimentTrainingRequirement = `-- name: AddExperimentTrainingRequirement :execrows
 insert into experiment_training_requirements (experiment_id, experiment_role_id)
-values ($1, $2)
+select $1, $2
+where exists (
+    select 1 from experiments e
+    join experiment_roles er on er.lab_id = e.lab_id
+    where e.id = $1 and er.id = $2
+)
 `
 
 type AddExperimentTrainingRequirementParams struct {
@@ -85,9 +132,12 @@ type AddExperimentTrainingRequirementParams struct {
 	ExperimentRoleID int64 `json:"experiment_role_id"`
 }
 
-func (q *Queries) AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error {
-	_, err := q.db.Exec(ctx, addExperimentTrainingRequirement, arg.ExperimentID, arg.ExperimentRoleID)
-	return err
+func (q *Queries) AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addExperimentTrainingRequirement, arg.ExperimentID, arg.ExperimentRoleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const createExperiment = `-- name: CreateExperiment :one

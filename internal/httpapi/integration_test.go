@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,7 +75,7 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -165,7 +166,7 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -297,6 +298,55 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 	if rec := do(http.MethodGet, fmt.Sprintf("/experiments/%d/", experiment.ID), nil); rec.Code != http.StatusOK {
 		t.Errorf("sanity check: own lab's experiment should still be reachable, status = %d", rec.Code)
 	}
+
+	// Cross-lab attachment: a member of labID could otherwise attach
+	// otherLabID's condition to their own experiment just by guessing its
+	// id, since requireLabMemberForExperiment only checks the
+	// experiment's own lab. otherCondition is created directly through
+	// testQueries (bypassing HTTP authorization, which this user
+	// legitimately can't reach for otherLabID) purely to get a real
+	// cross-lab id to attempt the attack with.
+	otherCondition, err := testQueries.CreateCondition(ctx, db.CreateConditionParams{LabID: otherLabID, Name: "Cross-Lab Condition"})
+	if err != nil {
+		t.Fatalf("CreateCondition (other lab): %v", err)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/conditions/", experiment.ID), addConditionRequest{ConditionID: otherCondition.ID}); rec.Code != http.StatusNotFound {
+		t.Errorf("attach another lab's condition: status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+}
+
+// TestWithTx_Integration proves withTx's rollback-on-error behavior
+// against a real Postgres transaction, not just the fakeTx double the
+// unit tests use: a write made inside fn must not be visible after fn
+// returns an error.
+func TestWithTx_Integration(t *testing.T) {
+	ctx := context.Background()
+	s := &Server{queries: testQueries, beginner: testPool}
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"WithTx Integration Lab", fmt.Sprintf("withtx-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	wantErr := errors.New("boom")
+	txErr := s.withTx(ctx, func(q db.Querier) error {
+		if _, err := q.CreateCondition(ctx, db.CreateConditionParams{LabID: labID, Name: "Should Roll Back"}); err != nil {
+			t.Fatalf("CreateCondition inside tx: %v", err)
+		}
+		return wantErr
+	})
+	if !errors.Is(txErr, wantErr) {
+		t.Fatalf("withTx error = %v, want %v", txErr, wantErr)
+	}
+
+	conditions, err := testQueries.ListConditionsByLab(ctx, labID)
+	if err != nil {
+		t.Fatalf("ListConditionsByLab: %v", err)
+	}
+	if len(conditions) != 0 {
+		t.Errorf("conditions after a rolled-back transaction = %+v, want none", conditions)
+	}
 }
 
 // TestSchedulingFlow_Integration exercises M5's real point: that the
@@ -348,7 +398,7 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -573,7 +623,7 @@ func TestMatchingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -784,7 +834,7 @@ func TestReportingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -976,7 +1026,7 @@ func TestNewsletterExportFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1348,7 +1398,7 @@ func TestRequestMCDIFlow_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, mcdiClient, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1423,7 +1473,7 @@ func TestRequestMCDIFlow_NoGuardianEmail_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, mcdiClient, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger())
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {

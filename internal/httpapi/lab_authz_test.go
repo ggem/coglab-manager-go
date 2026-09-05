@@ -166,7 +166,7 @@ func TestRequireLabMemberForExperiment_Member_JoinManagementRoute(t *testing.T) 
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 9}, nil
 		},
-		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error { return nil },
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) { return 1, nil },
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			return db.AuditEvent{ID: 1}, nil
 		},

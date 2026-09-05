@@ -18,9 +18,9 @@ func TestHandleAddExperimentCondition_Success(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
 			captured = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			capturedAudit = arg
@@ -67,8 +67,8 @@ func TestHandleAddExperimentCondition_UnknownCondition(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
-			return &pgconn.PgError{Code: pgForeignKeyViolation}
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgForeignKeyViolation}
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -88,8 +88,8 @@ func TestHandleAddExperimentCondition_AlreadyAdded(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
-			return &pgconn.PgError{Code: pgUniqueViolation}
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgUniqueViolation}
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -101,13 +101,36 @@ func TestHandleAddExperimentCondition_AlreadyAdded(t *testing.T) {
 	}
 }
 
+// TestHandleAddExperimentCondition_CrossLab covers a lab member attaching
+// another lab's condition by guessing its id: the query's exists check
+// (condition.lab_id = experiment.lab_id) then inserts nothing, and the
+// handler must turn that 0-rows result into a 404 rather than a false
+// success.
+func TestHandleAddExperimentCondition_CrossLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
+			return 0, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/conditions/", cookie, addConditionRequest{ConditionID: 5})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+}
+
 func TestHandleAddExperimentCondition_UnexpectedDBError(t *testing.T) {
 	q := &dbfake.Querier{
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) error {
-			return assertErr("connection reset by peer")
+		AddExperimentConditionFunc: func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
+			return 0, assertErr("connection reset by peer")
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -208,9 +231,9 @@ func TestHandleAddExperimentEquipment_Success(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
+		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) (int64, error) {
 			captured = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			return db.AuditEvent{ID: 1}, nil
@@ -233,8 +256,8 @@ func TestHandleAddExperimentEquipment_AlreadyAdded(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
-			return &pgconn.PgError{Code: pgUniqueViolation}
+		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgUniqueViolation}
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -243,6 +266,24 @@ func TestHandleAddExperimentEquipment_AlreadyAdded(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestHandleAddExperimentEquipment_CrossLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentEquipmentFunc: func(ctx context.Context, arg db.AddExperimentEquipmentParams) (int64, error) {
+			return 0, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/equipment/", cookie, addEquipmentRequest{EquipmentID: 8})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
 	}
 }
 
@@ -303,9 +344,9 @@ func TestHandleAddExperimentTrainingRequirement_Success(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
+		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error) {
 			captured = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			return db.AuditEvent{ID: 1}, nil
@@ -328,8 +369,8 @@ func TestHandleAddExperimentTrainingRequirement_AlreadyAdded(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
-			return &pgconn.PgError{Code: pgUniqueViolation}
+		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgUniqueViolation}
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -338,6 +379,24 @@ func TestHandleAddExperimentTrainingRequirement_AlreadyAdded(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestHandleAddExperimentTrainingRequirement_CrossLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error) {
+			return 0, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/training-requirements/", cookie, addTrainingRequirementRequest{ExperimentRoleID: 2})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
 	}
 }
 
@@ -421,9 +480,9 @@ func TestHandleAddExperimentGrant_Success(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) error {
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error) {
 			captured = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			capturedAudit = arg
@@ -445,13 +504,49 @@ func TestHandleAddExperimentGrant_Success(t *testing.T) {
 	}
 }
 
+func TestHandleAddExperimentGrant_AlreadyAdded(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgUniqueViolation}
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/grants/", cookie, addGrantRequest{GrantID: 5})
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestHandleAddExperimentGrant_CrossLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error) {
+			return 0, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/grants/", cookie, addGrantRequest{GrantID: 5})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+}
+
 func TestHandleAddExperimentGrant_UnexpectedDBError(t *testing.T) {
 	q := &dbfake.Querier{
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) error {
-			return assertErr("connection reset by peer")
+		AddExperimentGrantFunc: func(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error) {
+			return 0, assertErr("connection reset by peer")
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
@@ -554,9 +649,9 @@ func TestHandleAddExperimentPrincipalInvestigator_Success(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error) {
 			captured = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			capturedAudit = arg
@@ -578,13 +673,53 @@ func TestHandleAddExperimentPrincipalInvestigator_Success(t *testing.T) {
 	}
 }
 
+func TestHandleAddExperimentPrincipalInvestigator_AlreadyAdded(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error) {
+			return 0, &pgconn.PgError{Code: pgUniqueViolation}
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/principal-investigators/", cookie, addPrincipalInvestigatorRequest{UserID: 5})
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+// TestHandleAddExperimentPrincipalInvestigator_CrossLab covers both a
+// user from a different lab and a user with no lab_memberships row at
+// all in this lab -- the query's exists check requires a matching
+// (lab_id, user_id) membership, so either case inserts nothing.
+func TestHandleAddExperimentPrincipalInvestigator_CrossLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error) {
+			return 0, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiments/3/principal-investigators/", cookie, addPrincipalInvestigatorRequest{UserID: 5})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+}
+
 func TestHandleAddExperimentPrincipalInvestigator_UnexpectedDBError(t *testing.T) {
 	q := &dbfake.Querier{
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
-		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
-			return assertErr("connection reset by peer")
+		AddExperimentPrincipalInvestigatorFunc: func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error) {
+			return 0, assertErr("connection reset by peer")
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)

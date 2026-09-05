@@ -64,6 +64,7 @@ func run() error {
 		auth.NewSessionManager(queries, secureCookies()),
 		audit.NewRecorder(queries),
 		queries,
+		pool,
 		mcdiClient,
 		logger,
 	)

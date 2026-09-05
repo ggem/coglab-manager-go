@@ -14,11 +14,21 @@ type Querier interface {
 	// Join management: conditions, equipment, and training-role requirements
 	// for an experiment. Each List query joins back to the lookup table so
 	// callers get full rows (name, etc.) in one query instead of N+1 lookups.
-	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) error
-	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) error
-	AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) error
-	AddExperimentPrincipalInvestigator(ctx context.Context, arg AddExperimentPrincipalInvestigatorParams) error
-	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) error
+	//
+	// Each Add* query below is an insert...select gated on an exists check
+	// that the target row belongs to the same lab as the experiment --
+	// request authorization (requireLabMemberForExperiment) only checks the
+	// experiment's own lab, not whether the attached id belongs to it, so
+	// without this a lab member could attach another lab's condition/
+	// equipment/role/grant/user by guessing its id. :execrows lets the
+	// handler tell "attached" (1 row) apart from "cross-lab or unknown id"
+	// (0 rows, since the insert then has nothing to select) without a
+	// separate existence query.
+	AddExperimentCondition(ctx context.Context, arg AddExperimentConditionParams) (int64, error)
+	AddExperimentEquipment(ctx context.Context, arg AddExperimentEquipmentParams) (int64, error)
+	AddExperimentGrant(ctx context.Context, arg AddExperimentGrantParams) (int64, error)
+	AddExperimentPrincipalInvestigator(ctx context.Context, arg AddExperimentPrincipalInvestigatorParams) (int64, error)
+	AddExperimentTrainingRequirement(ctx context.Context, arg AddExperimentTrainingRequirementParams) (int64, error)
 	AddLabMemberTraining(ctx context.Context, arg AddLabMemberTrainingParams) error
 	// Only a scheduled ('pending') appointment can arrive -- an unscheduled
 	// one has no date/time for a visit to have happened at. Frees the hold,

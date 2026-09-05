@@ -36,7 +36,10 @@ func newTestServer(q *dbfake.Querier) *Server {
 // need to control the fake MCDI client's behavior (e.g. configuring it
 // to fail) rather than accepting the default no-op one.
 func newTestServerWithMCDI(q *dbfake.Querier, mcdiClient *mcdifake.Client) *Server {
-	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, mcdiClient, discardLogger())
+	// beginner is nil -- see txBeginner's doc comment in server.go for why
+	// dbfake-backed tests don't need a real transaction to exercise
+	// handler logic and error handling.
+	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, nil, mcdiClient, discardLogger())
 }
 
 func postJSON(t *testing.T, s *Server, path string, body any) *httptest.ResponseRecorder {

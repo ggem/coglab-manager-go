@@ -71,9 +71,9 @@ func TestHandleCreateExperiment_WithExperimenterRole(t *testing.T) {
 			createdRole = arg
 			return db.ExperimentRole{ID: 11, LabID: arg.LabID, Name: arg.Name}, nil
 		},
-		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
+		AddExperimentTrainingRequirementFunc: func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error) {
 			addedRequirement = arg
-			return nil
+			return 1, nil
 		},
 		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
 			return db.AuditEvent{ID: 1}, nil
@@ -180,6 +180,48 @@ func TestHandleCreateExperiment_InvalidStatus(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+// TestHandleCreateExperiment_CrossLabProtocol covers a lab member
+// creating an experiment against another lab's protocol by guessing its
+// id: authorization only checks the lab named in the URL, not that
+// protocol_id belongs to it.
+func TestHandleCreateExperiment_CrossLabProtocol(t *testing.T) {
+	q := &dbfake.Querier{
+		GetProtocolByIDFunc: func(ctx context.Context, id int64) (db.Protocol, error) {
+			return db.Protocol{ID: id, LabID: 404}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	protocolID := int64(5)
+	rec := doRequest(t, s, http.MethodPost, "/labs/9/experiments/", cookie, experimentRequest{
+		Name: "X", Status: "not_run", ProtocolID: &protocolID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
+	}
+}
+
+// TestHandleCreateExperiment_CrossLabExperimentType is the same coverage
+// as TestHandleCreateExperiment_CrossLabProtocol, for experiment_type_id.
+func TestHandleCreateExperiment_CrossLabExperimentType(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentTypeByIDFunc: func(ctx context.Context, id int64) (db.ExperimentType, error) {
+			return db.ExperimentType{ID: id, LabID: 404}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	experimentTypeID := int64(5)
+	rec := doRequest(t, s, http.MethodPost, "/labs/9/experiments/", cookie, experimentRequest{
+		Name: "X", Status: "not_run", ExperimentTypeID: &experimentTypeID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
 	}
 }
 
@@ -334,6 +376,9 @@ func TestHandleUpdateExperiment_ProtocolIDRoundTrips(t *testing.T) {
 		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
 			return db.Experiment{ID: id, LabID: 1}, nil
 		},
+		GetProtocolByIDFunc: func(ctx context.Context, id int64) (db.Protocol, error) {
+			return db.Protocol{ID: id, LabID: 1}, nil
+		},
 		UpdateExperimentFunc: func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error) {
 			captured = arg
 			return db.Experiment{ID: arg.ID, Name: arg.Name, Status: arg.Status, ProtocolID: arg.ProtocolID}, nil
@@ -358,6 +403,27 @@ func TestHandleUpdateExperiment_ProtocolIDRoundTrips(t *testing.T) {
 	got := decodeBody[experimentResponse](t, rec)
 	if got.ProtocolID == nil || *got.ProtocolID != protocolID {
 		t.Errorf("response ProtocolID = %v, want %d", got.ProtocolID, protocolID)
+	}
+}
+
+func TestHandleUpdateExperiment_CrossLabProtocol(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentByIDFunc: func(ctx context.Context, id int64) (db.Experiment, error) {
+			return db.Experiment{ID: id, LabID: 1}, nil
+		},
+		GetProtocolByIDFunc: func(ctx context.Context, id int64) (db.Protocol, error) {
+			return db.Protocol{ID: id, LabID: 404}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	protocolID := int64(5)
+	rec := doRequest(t, s, http.MethodPut, "/experiments/3/", cookie, experimentRequest{
+		Name: "X", Status: "not_run", ProtocolID: &protocolID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
 	}
 }
 

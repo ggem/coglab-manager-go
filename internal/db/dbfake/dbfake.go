@@ -55,19 +55,19 @@ type Querier struct {
 	UpdateExperimentFunc     func(ctx context.Context, arg db.UpdateExperimentParams) (db.Experiment, error)
 	DeactivateExperimentFunc func(ctx context.Context, id int64) error
 
-	AddExperimentConditionFunc                func(ctx context.Context, arg db.AddExperimentConditionParams) error
+	AddExperimentConditionFunc                func(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error)
 	RemoveExperimentConditionFunc             func(ctx context.Context, arg db.RemoveExperimentConditionParams) error
 	ListExperimentConditionsFunc              func(ctx context.Context, experimentID int64) ([]db.Condition, error)
-	AddExperimentEquipmentFunc                func(ctx context.Context, arg db.AddExperimentEquipmentParams) error
+	AddExperimentEquipmentFunc                func(ctx context.Context, arg db.AddExperimentEquipmentParams) (int64, error)
 	RemoveExperimentEquipmentFunc             func(ctx context.Context, arg db.RemoveExperimentEquipmentParams) error
 	ListExperimentEquipmentFunc               func(ctx context.Context, experimentID int64) ([]db.Equipment, error)
-	AddExperimentTrainingRequirementFunc      func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error
+	AddExperimentTrainingRequirementFunc      func(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error)
 	RemoveExperimentTrainingRequirementFunc   func(ctx context.Context, arg db.RemoveExperimentTrainingRequirementParams) error
 	ListExperimentTrainingRequirementsFunc    func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error)
-	AddExperimentGrantFunc                    func(ctx context.Context, arg db.AddExperimentGrantParams) error
+	AddExperimentGrantFunc                    func(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error)
 	RemoveExperimentGrantFunc                 func(ctx context.Context, arg db.RemoveExperimentGrantParams) error
 	ListExperimentGrantsFunc                  func(ctx context.Context, experimentID int64) ([]db.Grant, error)
-	AddExperimentPrincipalInvestigatorFunc    func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error
+	AddExperimentPrincipalInvestigatorFunc    func(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error)
 	RemoveExperimentPrincipalInvestigatorFunc func(ctx context.Context, arg db.RemoveExperimentPrincipalInvestigatorParams) error
 	ListExperimentPrincipalInvestigatorsFunc  func(ctx context.Context, experimentID int64) ([]db.User, error)
 	CreateExperimentTypeFunc                  func(ctx context.Context, arg db.CreateExperimentTypeParams) (db.ExperimentType, error)
@@ -411,7 +411,7 @@ func (q *Querier) DeactivateExperiment(ctx context.Context, id int64) error {
 	return q.DeactivateExperimentFunc(ctx, id)
 }
 
-func (q *Querier) AddExperimentCondition(ctx context.Context, arg db.AddExperimentConditionParams) error {
+func (q *Querier) AddExperimentCondition(ctx context.Context, arg db.AddExperimentConditionParams) (int64, error) {
 	if q.AddExperimentConditionFunc == nil {
 		panic("dbfake: AddExperimentCondition not implemented")
 	}
@@ -432,7 +432,7 @@ func (q *Querier) ListExperimentConditions(ctx context.Context, experimentID int
 	return q.ListExperimentConditionsFunc(ctx, experimentID)
 }
 
-func (q *Querier) AddExperimentEquipment(ctx context.Context, arg db.AddExperimentEquipmentParams) error {
+func (q *Querier) AddExperimentEquipment(ctx context.Context, arg db.AddExperimentEquipmentParams) (int64, error) {
 	if q.AddExperimentEquipmentFunc == nil {
 		panic("dbfake: AddExperimentEquipment not implemented")
 	}
@@ -453,7 +453,7 @@ func (q *Querier) ListExperimentEquipment(ctx context.Context, experimentID int6
 	return q.ListExperimentEquipmentFunc(ctx, experimentID)
 }
 
-func (q *Querier) AddExperimentTrainingRequirement(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) error {
+func (q *Querier) AddExperimentTrainingRequirement(ctx context.Context, arg db.AddExperimentTrainingRequirementParams) (int64, error) {
 	if q.AddExperimentTrainingRequirementFunc == nil {
 		panic("dbfake: AddExperimentTrainingRequirement not implemented")
 	}
@@ -474,7 +474,7 @@ func (q *Querier) ListExperimentTrainingRequirements(ctx context.Context, experi
 	return q.ListExperimentTrainingRequirementsFunc(ctx, experimentID)
 }
 
-func (q *Querier) AddExperimentGrant(ctx context.Context, arg db.AddExperimentGrantParams) error {
+func (q *Querier) AddExperimentGrant(ctx context.Context, arg db.AddExperimentGrantParams) (int64, error) {
 	if q.AddExperimentGrantFunc == nil {
 		panic("dbfake: AddExperimentGrant not implemented")
 	}
@@ -495,7 +495,7 @@ func (q *Querier) ListExperimentGrants(ctx context.Context, experimentID int64) 
 	return q.ListExperimentGrantsFunc(ctx, experimentID)
 }
 
-func (q *Querier) AddExperimentPrincipalInvestigator(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) error {
+func (q *Querier) AddExperimentPrincipalInvestigator(ctx context.Context, arg db.AddExperimentPrincipalInvestigatorParams) (int64, error) {
 	if q.AddExperimentPrincipalInvestigatorFunc == nil {
 		panic("dbfake: AddExperimentPrincipalInvestigator not implemented")
 	}

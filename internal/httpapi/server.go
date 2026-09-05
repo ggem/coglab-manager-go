@@ -6,11 +6,13 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/auth"
@@ -33,19 +35,51 @@ type Server struct {
 	sessions      *auth.SessionManager
 	audit         *audit.Recorder
 	queries       db.Querier
+	beginner      txBeginner
 	mcdiClient    mcdi.Client
 	logger        *slog.Logger
 }
 
-func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, mcdiClient mcdi.Client, logger *slog.Logger) *Server {
+// txBeginner is satisfied by *pgxpool.Pool (wired in cmd/api/main.go) and
+// by the real Postgres pool the integration test suite uses. A Server
+// built with beginner == nil (every dbfake-backed unit test) falls back
+// to withTx running its callback directly against s.queries: those tests
+// verify call sequencing and error handling, not real rollback, since
+// dbfake has no database to roll back -- actual atomicity is exercised
+// against a real Postgres in the integration suite.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, beginner txBeginner, mcdiClient mcdi.Client, logger *slog.Logger) *Server {
 	return &Server{
 		authenticator: authenticator,
 		sessions:      sessions,
 		audit:         recorder,
 		queries:       queries,
+		beginner:      beginner,
 		mcdiClient:    mcdiClient,
 		logger:        logger,
 	}
+}
+
+// withTx runs fn with a Querier scoped to a fresh transaction, committing
+// on success and rolling back if fn (or the commit itself) fails. See
+// txBeginner's doc comment for the nil-beginner fallback used by unit
+// tests.
+func (s *Server) withTx(ctx context.Context, fn func(db.Querier) error) error {
+	if s.beginner == nil {
+		return fn(s.queries)
+	}
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(db.New(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Server) Routes() http.Handler {
