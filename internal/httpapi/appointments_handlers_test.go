@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -246,6 +247,55 @@ func TestHandleScheduleAppointment_Success(t *testing.T) {
 	got := decodeBody[appointmentResponse](t, rec)
 	if got.Status != "pending" {
 		t.Errorf("response Status = %q, want \"pending\"", got.Status)
+	}
+}
+
+// TestHandleScheduleAppointment_ExperimenterInsertFails covers the
+// hardening fix: if a CreateAppointmentExperimenter insert fails partway
+// through the assignment loop, the handler must surface a 500 rather
+// than the 200 it would have returned before this was wrapped in
+// s.withTx (a real Postgres rollback is exercised by withtx_test.go's
+// generic transaction tests; this confirms the handler's own control
+// flow actually returns the transaction's error instead of ignoring it).
+func TestHandleScheduleAppointment_ExperimenterInsertFails(t *testing.T) {
+	experiment := db.Experiment{ID: 5, LabID: 1, DurationMinutes: 30}
+	appointment := db.Appointment{ID: 3, ExperimentID: 5, SiblingComing: "unknown"}
+	q := minimalSearchQuerier(experiment, appointment)
+
+	role := db.ExperimentRole{ID: 8, LabID: 1, Name: "Experimenter"}
+	member := db.User{ID: 17, FirstName: "Ada", LastName: "Lovelace"}
+
+	q.ListExperimentTrainingRequirementsFunc = func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error) {
+		return []db.ExperimentRole{role}, nil
+	}
+	q.ListLabMemberTrainingsForRoleFunc = func(ctx context.Context, experimentRoleID int64) ([]db.User, error) {
+		return []db.User{member}, nil
+	}
+	q.ListLabAvailabilitySpecificForDateRangeFunc = func(ctx context.Context, arg db.ListLabAvailabilitySpecificForDateRangeParams) ([]db.LabAvailabilitySpecific, error) {
+		return []db.LabAvailabilitySpecific{
+			{
+				UserID:    member.ID,
+				Date:      pgtype.Date{Time: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+				StartTime: pgtype.Time{Microseconds: int64(9 * time.Hour / time.Microsecond), Valid: true},
+				EndTime:   pgtype.Time{Microseconds: int64(17 * time.Hour / time.Microsecond), Valid: true},
+			},
+		}, nil
+	}
+	q.ScheduleAppointmentFunc = func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error) {
+		return db.Appointment{ID: arg.ID, ExperimentID: 5, Status: "pending"}, nil
+	}
+	q.CreateAppointmentExperimenterFunc = func(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error) {
+		return db.AppointmentExperimenter{}, assertErr("connection reset by peer")
+	}
+
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/schedule", cookie, scheduleAppointmentRequest{
+		Date: "2026-09-01", StartTime: "09:00",
+	})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusInternalServerError, rec.Body)
 	}
 }
 

@@ -344,35 +344,47 @@ func (s *Server) handleScheduleAppointment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	scheduled, err := s.queries.ScheduleAppointment(r.Context(), db.ScheduleAppointmentParams{
-		ID:                appointmentID,
-		ScheduleDate:      scheduleDate,
-		ScheduleTimeStart: startTime,
-		ScheduleTimeEnd:   endTime,
+	// The status update, every experimenter assignment, and the audit
+	// event all run in one transaction: without this, a failure partway
+	// through the assignment loop left the appointment already committed
+	// as scheduled with only some (or none) of its staff assigned, and no
+	// way to tell from the audit trail that scheduling never really
+	// finished.
+	var scheduled db.Appointment
+	txErr := s.withTx(r.Context(), func(q db.Querier) error {
+		var err error
+		scheduled, err = q.ScheduleAppointment(r.Context(), db.ScheduleAppointmentParams{
+			ID:                appointmentID,
+			ScheduleDate:      scheduleDate,
+			ScheduleTimeStart: startTime,
+			ScheduleTimeEnd:   endTime,
+		})
+		if err != nil {
+			return err
+		}
+
+		for roleID, userID := range chosen.Assignment {
+			if _, err := q.CreateAppointmentExperimenter(r.Context(), db.CreateAppointmentExperimenterParams{
+				AppointmentID:    appointmentID,
+				UserID:           userID,
+				ExperimentRoleID: roleID,
+				IsGreeter:        userID == chosen.GreeterID,
+			}); err != nil {
+				return err
+			}
+		}
+
+		return audit.NewRecorder(q).Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			Action:      ActionAppointmentScheduled,
+			EntityType:  ptr("appointment"),
+			EntityID:    &appointmentID,
+		})
 	})
-	if err != nil {
-		s.writeDBError(w, err)
+	if txErr != nil {
+		s.writeDBError(w, txErr)
 		return
 	}
-
-	for roleID, userID := range chosen.Assignment {
-		if _, err := s.queries.CreateAppointmentExperimenter(r.Context(), db.CreateAppointmentExperimenterParams{
-			AppointmentID:    appointmentID,
-			UserID:           userID,
-			ExperimentRoleID: roleID,
-			IsGreeter:        userID == chosen.GreeterID,
-		}); err != nil {
-			s.writeDBError(w, err)
-			return
-		}
-	}
-
-	s.recordAuditEvent(r, audit.Event{
-		ActorUserID: currentUserID(r.Context()),
-		Action:      ActionAppointmentScheduled,
-		EntityType:  ptr("appointment"),
-		EntityID:    &appointmentID,
-	})
 
 	writeJSON(w, http.StatusOK, appointmentToResponse(scheduled))
 }
