@@ -278,6 +278,31 @@ export function createChildNote(childId: number, body: string): Promise<Note> {
   return apiFetch<Note>(`/children/${childId}/notes/`, { method: 'POST', body: JSON.stringify({ body }) })
 }
 
+export function getChild(id: number): Promise<Child> {
+  return apiFetch<Child>(`/children/${id}/`)
+}
+
+export interface AppointmentHistoryEntry {
+  appointment_id: number
+  experiment_name: string
+  status: string
+  schedule_date: string | null
+}
+
+export interface SiblingAppointmentHistoryEntry extends AppointmentHistoryEntry {
+  child_first_name: string
+  child_last_name: string
+}
+
+export interface ChildAppointmentHistory {
+  own: AppointmentHistoryEntry[]
+  siblings: SiblingAppointmentHistoryEntry[]
+}
+
+export function getChildAppointmentHistory(childId: number): Promise<ChildAppointmentHistory> {
+  return apiFetch<ChildAppointmentHistory>(`/children/${childId}/appointment-history`)
+}
+
 export interface RecruitmentSource {
   id: number
   name: string
@@ -736,3 +761,97 @@ export function deactivateScheduleBlocking(id: number): Promise<void> {
   return apiFetch<void>(`/schedule-blockings/${id}/deactivate`, { method: 'POST' })
 }
 
+// --- Appointments ---
+
+export interface Appointment {
+  id: number
+  experiment_id: number
+  child_id: number
+  session: number
+  age_range_min_months: number | null
+  age_range_max_months: number | null
+  sibling_coming: string
+  schedule_date: string | null
+  schedule_time_start: string | null
+  schedule_time_end: string | null
+  status: string
+  created_at: string
+}
+
+export function listAppointmentsByExperiment(experimentId: number, status?: string): Promise<Appointment[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return apiFetch<Appointment[]>(`/experiments/${experimentId}/appointments${query}`)
+}
+
+export interface HoldChildrenInput {
+  start_date: string
+  end_date: string
+  count: number
+  sort: 'oldest' | 'random'
+  sex: string | null
+}
+
+export function holdChildrenForExperiment(experimentId: number, input: HoldChildrenInput): Promise<Appointment[]> {
+  return apiFetch<Appointment[]>(`/experiments/${experimentId}/hold-children`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function releaseAppointment(appointmentId: number): Promise<Appointment> {
+  return apiFetch<Appointment>(`/appointments/${appointmentId}/release`, { method: 'POST' })
+}
+export function arriveAppointment(appointmentId: number): Promise<Appointment> {
+  return apiFetch<Appointment>(`/appointments/${appointmentId}/arrive`, { method: 'POST' })
+}
+
+export interface AppointmentExperimenter {
+  user_id: number
+  first_name: string
+  last_name: string
+  experiment_role_id: number
+  role_name: string
+  is_greeter: boolean
+}
+
+// Empty for a to_be_scheduled appointment -- staff are only assigned at
+// the moment of scheduling.
+export function listAppointmentExperimenters(appointmentId: number): Promise<AppointmentExperimenter[]> {
+  return apiFetch<AppointmentExperimenter[]>(`/appointments/${appointmentId}/experimenters`)
+}
+
+// A candidate slot's assignment maps experiment_role_id -> user_id --
+// object keys are always strings in JSON, so callers reading a specific
+// role's assignee need Number() on the key.
+export interface CandidateSlot {
+  date: string
+  start_time: string
+  assignment: Record<string, number>
+  greeter_id: number
+  has_sitter: boolean
+}
+
+export function searchAppointmentAvailability(
+  appointmentId: number,
+  startDate: string,
+  endDate: string,
+): Promise<CandidateSlot[]> {
+  return apiFetch<CandidateSlot[]>(
+    `/appointments/${appointmentId}/availability?start_date=${startDate}&end_date=${endDate}`,
+  )
+}
+export function scheduleAppointment(appointmentId: number, date: string, startTime: string): Promise<Appointment> {
+  return apiFetch<Appointment>(`/appointments/${appointmentId}/schedule`, {
+    method: 'POST',
+    body: JSON.stringify({ date, start_time: startTime }),
+  })
+}
+
+// The appointment call log: same generic Note shape as child notes,
+// just scoped to entity_type "appointment" on the backend.
+export function listAppointmentNotes(appointmentId: number): Promise<Note[]> {
+  return apiFetch<Note[]>(`/appointments/${appointmentId}/notes/`)
+}
+export function createAppointmentNote(appointmentId: number, body: string): Promise<Note> {
+  return apiFetch<Note>(`/appointments/${appointmentId}/notes/`, { method: 'POST', body: JSON.stringify({ body }) })
+}

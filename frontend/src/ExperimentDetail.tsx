@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import ExperimentForm from './ExperimentForm'
 import AttachList from './AttachList'
+import AppointmentsPanel from './AppointmentsPanel'
 import {
   addExperimentCondition,
   addExperimentEquipment,
@@ -151,6 +152,8 @@ export default function ExperimentDetail() {
         label={(u) => `${u.first_name} ${u.last_name}`}
         addLabel="Add a principal investigator…"
       />
+
+      <AppointmentsPanel experimentId={id} labId={labId} />
     </div>
   )
 }
