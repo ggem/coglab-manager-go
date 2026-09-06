@@ -88,3 +88,68 @@ func (s *Server) handleListChildNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
+
+// handleCreateAppointmentNote / handleListAppointmentNotes are the
+// appointment-scoped call log: legacy's hold-to-schedule flow has a
+// coordinator log each call to the family before finding a date/time.
+// Rather than a dedicated call-log table, this reuses the same
+// polymorphic notes table/queries as child notes above, just with
+// EntityType "appointment" -- no schema change needed.
+func (s *Server) handleCreateAppointmentNote(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+	userID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req noteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	note, err := s.queries.CreateNote(r.Context(), db.CreateNoteParams{
+		EntityType:   "appointment",
+		EntityID:     appointmentID,
+		AuthorUserID: userID,
+		Body:         req.Body,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: &userID,
+		Action:      ActionNoteCreated,
+		EntityType:  ptr("appointment"),
+		EntityID:    &appointmentID,
+	})
+
+	writeJSON(w, http.StatusCreated, noteToResponse(note))
+}
+
+func (s *Server) handleListAppointmentNotes(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+
+	notes, err := s.queries.ListNotesByEntity(r.Context(), db.ListNotesByEntityParams{
+		EntityType: "appointment",
+		EntityID:   appointmentID,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]noteResponse, len(notes))
+	for i, n := range notes {
+		resp[i] = noteToResponse(n)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}

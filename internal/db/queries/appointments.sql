@@ -61,7 +61,13 @@ values (sqlc.arg(appointment_id), sqlc.arg(user_id), sqlc.arg(experiment_role_id
 returning *;
 
 -- name: ListAppointmentExperimenters :many
-select * from appointment_experimenters where appointment_id = sqlc.arg(appointment_id);
+-- Joined to users/experiment_roles for display -- a scheduled
+-- appointment's staff assignment is shown by name and role, not id.
+select appointment_experimenters.*, users.first_name, users.last_name, experiment_roles.name as role_name
+from appointment_experimenters
+join users on users.id = appointment_experimenters.user_id
+join experiment_roles on experiment_roles.id = appointment_experimenters.experiment_role_id
+where appointment_id = sqlc.arg(appointment_id);
 
 -- name: ListBusyAppointmentExperimentersForDateRange :many
 -- Members already committed to a Pending appointment within this date
@@ -89,3 +95,28 @@ join experiments on experiments.id = appointments.experiment_id
 where experiments.lab_id = sqlc.arg(lab_id)
   and appointments.schedule_date between sqlc.arg(start_date) and sqlc.arg(end_date)
   and appointments.status = 'pending';
+
+-- name: ListAppointmentsByChild :many
+-- A child's own appointment history across every experiment, excluding
+-- still-unscheduled holds -- shown on the hold-selection screen as
+-- "Previous Studies" (legacy's child-id->experiments).
+select appointments.*, experiments.name as experiment_name
+from appointments
+join experiments on experiments.id = appointments.experiment_id
+where appointments.child_id = sqlc.arg(child_id)
+  and appointments.status != 'to_be_scheduled'
+order by appointments.schedule_date desc nulls last, appointments.created_at desc;
+
+-- name: ListAppointmentsBySiblings :many
+-- Same as ListAppointmentsByChild, for the child's siblings (other
+-- children sharing its family_id) -- legacy's
+-- child-id->sibling-experiments.
+select appointments.*, experiments.name as experiment_name,
+       children.first_name as child_first_name, children.last_name as child_last_name
+from appointments
+join experiments on experiments.id = appointments.experiment_id
+join children on children.id = appointments.child_id
+where children.family_id = (select c.family_id from children c where c.id = sqlc.arg(child_id))
+  and children.id != sqlc.arg(child_id)
+  and appointments.status != 'to_be_scheduled'
+order by appointments.schedule_date desc nulls last, appointments.created_at desc;

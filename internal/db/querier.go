@@ -114,8 +114,18 @@ type Querier interface {
 	// experiments with no protocol assigned).
 	HRCReportTotal(ctx context.Context, arg HRCReportTotalParams) (int64, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
-	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error)
+	// Joined to users/experiment_roles for display -- a scheduled
+	// appointment's staff assignment is shown by name and role, not id.
+	ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]ListAppointmentExperimentersRow, error)
+	// A child's own appointment history across every experiment, excluding
+	// still-unscheduled holds -- shown on the hold-selection screen as
+	// "Previous Studies" (legacy's child-id->experiments).
+	ListAppointmentsByChild(ctx context.Context, childID int64) ([]ListAppointmentsByChildRow, error)
 	ListAppointmentsByExperiment(ctx context.Context, arg ListAppointmentsByExperimentParams) ([]Appointment, error)
+	// Same as ListAppointmentsByChild, for the child's siblings (other
+	// children sharing its family_id) -- legacy's
+	// child-id->sibling-experiments.
+	ListAppointmentsBySiblings(ctx context.Context, childID int64) ([]ListAppointmentsBySiblingsRow, error)
 	// Pending, not-yet-reminded appointments starting at or before the given
 	// cutoff (now + lead time), with the family's representative (lowest-id)
 	// guardian -- same idiom ListEligibleFamiliesForNewsletter uses. A

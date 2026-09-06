@@ -174,11 +174,13 @@ type Querier struct {
 	GetAppointmentByIDFunc           func(ctx context.Context, id int64) (db.Appointment, error)
 	GetAppointmentLabIDFunc          func(ctx context.Context, id int64) (int64, error)
 	ListAppointmentsByExperimentFunc func(ctx context.Context, arg db.ListAppointmentsByExperimentParams) ([]db.Appointment, error)
+	ListAppointmentsByChildFunc      func(ctx context.Context, childID int64) ([]db.ListAppointmentsByChildRow, error)
+	ListAppointmentsBySiblingsFunc   func(ctx context.Context, childID int64) ([]db.ListAppointmentsBySiblingsRow, error)
 	ScheduleAppointmentFunc          func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error)
 	ReleaseAppointmentFunc           func(ctx context.Context, id int64) (db.Appointment, error)
 
 	CreateAppointmentExperimenterFunc                func(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error)
-	ListAppointmentExperimentersFunc                 func(ctx context.Context, appointmentID int64) ([]db.AppointmentExperimenter, error)
+	ListAppointmentExperimentersFunc                 func(ctx context.Context, appointmentID int64) ([]db.ListAppointmentExperimentersRow, error)
 	ListBusyAppointmentExperimentersForDateRangeFunc func(ctx context.Context, arg db.ListBusyAppointmentExperimentersForDateRangeParams) ([]db.ListBusyAppointmentExperimentersForDateRangeRow, error)
 	ListBusyEquipmentForDateRangeFunc                func(ctx context.Context, arg db.ListBusyEquipmentForDateRangeParams) ([]db.ListBusyEquipmentForDateRangeRow, error)
 
@@ -1083,6 +1085,20 @@ func (q *Querier) ListAppointmentsByExperiment(ctx context.Context, arg db.ListA
 	return q.ListAppointmentsByExperimentFunc(ctx, arg)
 }
 
+func (q *Querier) ListAppointmentsByChild(ctx context.Context, childID int64) ([]db.ListAppointmentsByChildRow, error) {
+	if q.ListAppointmentsByChildFunc == nil {
+		panic("dbfake: ListAppointmentsByChild not implemented")
+	}
+	return q.ListAppointmentsByChildFunc(ctx, childID)
+}
+
+func (q *Querier) ListAppointmentsBySiblings(ctx context.Context, childID int64) ([]db.ListAppointmentsBySiblingsRow, error) {
+	if q.ListAppointmentsBySiblingsFunc == nil {
+		panic("dbfake: ListAppointmentsBySiblings not implemented")
+	}
+	return q.ListAppointmentsBySiblingsFunc(ctx, childID)
+}
+
 func (q *Querier) ScheduleAppointment(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error) {
 	if q.ScheduleAppointmentFunc == nil {
 		panic("dbfake: ScheduleAppointment not implemented")
@@ -1104,7 +1120,7 @@ func (q *Querier) CreateAppointmentExperimenter(ctx context.Context, arg db.Crea
 	return q.CreateAppointmentExperimenterFunc(ctx, arg)
 }
 
-func (q *Querier) ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]db.AppointmentExperimenter, error) {
+func (q *Querier) ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]db.ListAppointmentExperimentersRow, error) {
 	if q.ListAppointmentExperimentersFunc == nil {
 		panic("dbfake: ListAppointmentExperimenters not implemented")
 	}

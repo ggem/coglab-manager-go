@@ -78,7 +78,7 @@ func TestHandleCreateAppointment_InvalidExperimentID(t *testing.T) {
 }
 
 // minimalSearchQuerier stubs every query buildAvailabilitySearch needs for
-// a lab with no roles, no equipment, and no sitter role configured -- the
+// a lab with no roles, no equipment, and no sitter role configured.  The
 // simplest case where the search should trivially succeed for most of the
 // day (an empty role list is satisfiable, per internal/scheduling).
 func minimalSearchQuerier(experiment db.Experiment, appointment db.Appointment) *dbfake.Querier {
@@ -423,6 +423,48 @@ func TestHandleListAppointmentsByExperiment_UnexpectedDBError(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	rec := doRequest(t, s, http.MethodGet, "/experiments/5/appointments", cookie, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleListAppointmentExperimenters_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ListAppointmentExperimentersFunc: func(ctx context.Context, appointmentID int64) ([]db.ListAppointmentExperimentersRow, error) {
+			return []db.ListAppointmentExperimentersRow{
+				{UserID: 9, FirstName: "Ada", LastName: "Lovelace", ExperimentRoleID: 2, RoleName: "Experimenter", IsGreeter: true},
+			}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/appointments/3/experimenters", cookie, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[[]appointmentExperimenterResponse](t, rec)
+	if len(got) != 1 || got[0].FirstName != "Ada" || !got[0].IsGreeter {
+		t.Errorf("response = %+v", got)
+	}
+}
+
+func TestHandleListAppointmentExperimenters_UnexpectedDBError(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ListAppointmentExperimentersFunc: func(ctx context.Context, appointmentID int64) ([]db.ListAppointmentExperimentersRow, error) {
+			return nil, assertErr("connection reset by peer")
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/appointments/3/experimenters", cookie, nil)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)

@@ -164,24 +164,110 @@ func (q *Queries) GetAppointmentLabID(ctx context.Context, id int64) (int64, err
 }
 
 const listAppointmentExperimenters = `-- name: ListAppointmentExperimenters :many
-select id, appointment_id, user_id, experiment_role_id, is_greeter from appointment_experimenters where appointment_id = $1
+select appointment_experimenters.id, appointment_experimenters.appointment_id, appointment_experimenters.user_id, appointment_experimenters.experiment_role_id, appointment_experimenters.is_greeter, users.first_name, users.last_name, experiment_roles.name as role_name
+from appointment_experimenters
+join users on users.id = appointment_experimenters.user_id
+join experiment_roles on experiment_roles.id = appointment_experimenters.experiment_role_id
+where appointment_id = $1
 `
 
-func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]AppointmentExperimenter, error) {
+type ListAppointmentExperimentersRow struct {
+	ID               int64  `json:"id"`
+	AppointmentID    int64  `json:"appointment_id"`
+	UserID           int64  `json:"user_id"`
+	ExperimentRoleID int64  `json:"experiment_role_id"`
+	IsGreeter        bool   `json:"is_greeter"`
+	FirstName        string `json:"first_name"`
+	LastName         string `json:"last_name"`
+	RoleName         string `json:"role_name"`
+}
+
+// Joined to users/experiment_roles for display -- a scheduled
+// appointment's staff assignment is shown by name and role, not id.
+func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentID int64) ([]ListAppointmentExperimentersRow, error) {
 	rows, err := q.db.Query(ctx, listAppointmentExperimenters, appointmentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AppointmentExperimenter
+	var items []ListAppointmentExperimentersRow
 	for rows.Next() {
-		var i AppointmentExperimenter
+		var i ListAppointmentExperimentersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AppointmentID,
 			&i.UserID,
 			&i.ExperimentRoleID,
 			&i.IsGreeter,
+			&i.FirstName,
+			&i.LastName,
+			&i.RoleName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAppointmentsByChild = `-- name: ListAppointmentsByChild :many
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, experiments.name as experiment_name
+from appointments
+join experiments on experiments.id = appointments.experiment_id
+where appointments.child_id = $1
+  and appointments.status != 'to_be_scheduled'
+order by appointments.schedule_date desc nulls last, appointments.created_at desc
+`
+
+type ListAppointmentsByChildRow struct {
+	ID                int64              `json:"id"`
+	ExperimentID      int64              `json:"experiment_id"`
+	ChildID           int64              `json:"child_id"`
+	Session           int16              `json:"session"`
+	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing     string             `json:"sibling_coming"`
+	ScheduleDate      pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
+	ExperimentName    string             `json:"experiment_name"`
+}
+
+// A child's own appointment history across every experiment, excluding
+// still-unscheduled holds -- shown on the hold-selection screen as
+// "Previous Studies" (legacy's child-id->experiments).
+func (q *Queries) ListAppointmentsByChild(ctx context.Context, childID int64) ([]ListAppointmentsByChildRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsByChild, childID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAppointmentsByChildRow
+	for rows.Next() {
+		var i ListAppointmentsByChildRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExperimentID,
+			&i.ChildID,
+			&i.Session,
+			&i.AgeRangeMinMonths,
+			&i.AgeRangeMaxMonths,
+			&i.SiblingComing,
+			&i.ScheduleDate,
+			&i.ScheduleTimeStart,
+			&i.ScheduleTimeEnd,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReminderSentAt,
+			&i.ExperimentName,
 		); err != nil {
 			return nil, err
 		}
@@ -229,6 +315,79 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ReminderSentAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAppointmentsBySiblings = `-- name: ListAppointmentsBySiblings :many
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, experiments.name as experiment_name,
+       children.first_name as child_first_name, children.last_name as child_last_name
+from appointments
+join experiments on experiments.id = appointments.experiment_id
+join children on children.id = appointments.child_id
+where children.family_id = (select c.family_id from children c where c.id = $1)
+  and children.id != $1
+  and appointments.status != 'to_be_scheduled'
+order by appointments.schedule_date desc nulls last, appointments.created_at desc
+`
+
+type ListAppointmentsBySiblingsRow struct {
+	ID                int64              `json:"id"`
+	ExperimentID      int64              `json:"experiment_id"`
+	ChildID           int64              `json:"child_id"`
+	Session           int16              `json:"session"`
+	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing     string             `json:"sibling_coming"`
+	ScheduleDate      pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
+	ExperimentName    string             `json:"experiment_name"`
+	ChildFirstName    string             `json:"child_first_name"`
+	ChildLastName     string             `json:"child_last_name"`
+}
+
+// Same as ListAppointmentsByChild, for the child's siblings (other
+// children sharing its family_id) -- legacy's
+// child-id->sibling-experiments.
+func (q *Queries) ListAppointmentsBySiblings(ctx context.Context, childID int64) ([]ListAppointmentsBySiblingsRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsBySiblings, childID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAppointmentsBySiblingsRow
+	for rows.Next() {
+		var i ListAppointmentsBySiblingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExperimentID,
+			&i.ChildID,
+			&i.Session,
+			&i.AgeRangeMinMonths,
+			&i.AgeRangeMaxMonths,
+			&i.SiblingComing,
+			&i.ScheduleDate,
+			&i.ScheduleTimeStart,
+			&i.ScheduleTimeEnd,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReminderSentAt,
+			&i.ExperimentName,
+			&i.ChildFirstName,
+			&i.ChildLastName,
 		); err != nil {
 			return nil, err
 		}

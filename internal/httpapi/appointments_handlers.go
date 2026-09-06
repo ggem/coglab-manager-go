@@ -376,3 +376,41 @@ func (s *Server) handleScheduleAppointment(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, appointmentToResponse(scheduled))
 }
+
+type appointmentExperimenterResponse struct {
+	UserID           int64  `json:"user_id"`
+	FirstName        string `json:"first_name"`
+	LastName         string `json:"last_name"`
+	ExperimentRoleID int64  `json:"experiment_role_id"`
+	RoleName         string `json:"role_name"`
+	IsGreeter        bool   `json:"is_greeter"`
+}
+
+// handleListAppointmentExperimenters shows who's assigned to a scheduled
+// appointment -- empty for a to_be_scheduled one, since staff are only
+// assigned at the moment of scheduling (handleScheduleAppointment).
+func (s *Server) handleListAppointmentExperimenters(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+
+	rows, err := s.queries.ListAppointmentExperimenters(r.Context(), appointmentID)
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	resp := make([]appointmentExperimenterResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = appointmentExperimenterResponse{
+			UserID:           row.UserID,
+			FirstName:        row.FirstName,
+			LastName:         row.LastName,
+			ExperimentRoleID: row.ExperimentRoleID,
+			RoleName:         row.RoleName,
+			IsGreeter:        row.IsGreeter,
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}

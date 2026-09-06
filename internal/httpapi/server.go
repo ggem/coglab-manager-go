@@ -134,6 +134,7 @@ func (s *Server) Routes() http.Handler {
 					r.Post("/", s.handleCreateChildNote)
 					r.Get("/", s.handleListChildNotes)
 				})
+				r.Get("/appointment-history", s.handleGetChildAppointmentHistory)
 			})
 		})
 
@@ -326,6 +327,11 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/schedule", s.handleScheduleAppointment)
 			r.Post("/release", s.handleReleaseAppointment)
 			r.Post("/arrive", s.handleArriveAppointment)
+			r.Get("/experimenters", s.handleListAppointmentExperimenters)
+			r.Route("/notes", func(r chi.Router) {
+				r.Post("/", s.handleCreateAppointmentNote)
+				r.Get("/", s.handleListAppointmentNotes)
+			})
 		})
 	})
 

@@ -56,3 +56,57 @@ func TestHandleListChildNotes_Success(t *testing.T) {
 		t.Errorf("got %d notes, want 2", len(got))
 	}
 }
+
+func TestHandleCreateAppointmentNote_Success(t *testing.T) {
+	var captured db.CreateNoteParams
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		CreateNoteFunc: func(ctx context.Context, arg db.CreateNoteParams) (db.Note, error) {
+			captured = arg
+			return db.Note{ID: 1, AuthorUserID: arg.AuthorUserID, Body: arg.Body}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/notes/", cookie, noteRequest{Body: "called, left voicemail"})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body)
+	}
+	if captured.EntityType != "appointment" || captured.EntityID != 3 {
+		t.Errorf("CreateNote entity = %q/%d, want appointment/3", captured.EntityType, captured.EntityID)
+	}
+	if captured.AuthorUserID != 7 {
+		t.Errorf("CreateNote AuthorUserID = %d, want 7 (from the session)", captured.AuthorUserID)
+	}
+}
+
+func TestHandleListAppointmentNotes_Success(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		ListNotesByEntityFunc: func(ctx context.Context, arg db.ListNotesByEntityParams) ([]db.Note, error) {
+			if arg.EntityType != "appointment" || arg.EntityID != 3 {
+				t.Errorf("ListNotesByEntity called with %+v", arg)
+			}
+			return []db.Note{{ID: 1, Body: "called, left voicemail"}}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodGet, "/appointments/3/notes/", cookie, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	got := decodeBody[[]noteResponse](t, rec)
+	if len(got) != 1 {
+		t.Errorf("got %d notes, want 1", len(got))
+	}
+}
