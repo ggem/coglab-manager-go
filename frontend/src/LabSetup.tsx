@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import LookupTable from './LookupTable'
+import CreateDeleteList from './CreateDeleteList'
 import {
   createCondition,
   createConditionValue,
@@ -10,6 +11,7 @@ import {
   createExperimentType,
   createGrant,
   createProtocol,
+  createScheduleBlocking,
   createZipCode,
   deactivateCondition,
   deactivateConditionValue,
@@ -18,6 +20,7 @@ import {
   deactivateExperimentType,
   deactivateGrant,
   deactivateProtocol,
+  deactivateScheduleBlocking,
   deactivateZipCode,
   errorMessage,
   listConditionValues,
@@ -27,6 +30,7 @@ import {
   listExperimentTypes,
   listGrants,
   listProtocols,
+  listScheduleBlockings,
   listZipCodes,
   setExperimentRoleSitter,
   updateCondition,
@@ -38,9 +42,18 @@ import {
   updateProtocol,
   updateZipCode,
   type ExperimentRole,
+  type ScheduleBlocking,
 } from './api'
 
-type Tab = 'conditions' | 'equipment' | 'roles' | 'protocols' | 'grants' | 'zipcodes' | 'experimenttypes'
+type Tab =
+  | 'conditions'
+  | 'equipment'
+  | 'roles'
+  | 'protocols'
+  | 'grants'
+  | 'zipcodes'
+  | 'experimenttypes'
+  | 'scheduleblockings'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'conditions', label: 'Conditions' },
@@ -50,6 +63,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'grants', label: 'Grants' },
   { key: 'zipcodes', label: 'Zip Codes' },
   { key: 'experimenttypes', label: 'Experiment Types' },
+  { key: 'scheduleblockings', label: 'Schedule Blockings' },
 ]
 
 export default function LabSetup() {
@@ -150,6 +164,21 @@ export default function LabSetup() {
           deactivate={(rowId) => deactivateExperimentType(rowId)}
         />
       )}
+
+      {tab === 'scheduleblockings' && (
+        <CreateDeleteList<ScheduleBlocking>
+          queryKey={['schedule-blockings', id]}
+          fields={[
+            { key: 'date', label: 'Date', type: 'date' },
+            { key: 'start_time', label: 'Start time', type: 'time' },
+            { key: 'end_time', label: 'End time', type: 'time' },
+            { key: 'reason', label: 'Reason', type: 'text', required: false },
+          ]}
+          list={() => listScheduleBlockings(id)}
+          create={(v) => createScheduleBlocking(id, v.date, v.start_time, v.end_time, v.reason)}
+          remove={deactivateScheduleBlocking}
+        />
+      )}
     </div>
   )
 }
@@ -167,7 +196,7 @@ function RolesTable({ labId }: { labId: number }) {
       setExperimentRoleSitter(id, isSitterRole),
     onSuccess: () => {
       setSitterError(null)
-      queryClient.invalidateQueries({ queryKey: ['roles', labId] })
+      void queryClient.invalidateQueries({ queryKey: ['roles', labId] })
     },
     onError: (err) => setSitterError(errorMessage(err, 'Failed to set sitter role.')),
   })

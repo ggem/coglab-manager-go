@@ -11,7 +11,10 @@ import { errorMessage } from './api'
 export interface LookupField {
   key: string
   label: string
-  type: 'text' | 'number' | 'select'
+  // 'date'/'time' render as their native HTML input types -- added for
+  // CreateDeleteList.tsx's availability/schedule-blocking fields, which
+  // share this same field-config shape.
+  type: 'text' | 'number' | 'select' | 'date' | 'time'
   // Required when type is 'select' -- the fixed set of values a column
   // like guardians.education/phone_type's CHECK constraint allows.
   options?: { value: string; label: string }[]
@@ -40,7 +43,10 @@ function fieldValue(row: Row, key: string): unknown {
 // every other field type keeps its existing plain String() display.
 function fieldDisplay(row: Row, f: LookupField): string {
   if (f.type === 'select' && f.options) {
-    const opt = f.options.find((o) => o.value === fieldValue(row, f.key))
+    // String() on both sides: option values are always strings (they
+    // come from a <select>), but a numeric-backed field's API value
+    // wouldn't be -- compared with ===, `1 === '1'` is false.
+    const opt = f.options.find((o) => o.value === String(fieldValue(row, f.key)))
     if (opt) return opt.label
   }
   return String(fieldValue(row, f.key))

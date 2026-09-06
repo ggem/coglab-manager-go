@@ -267,8 +267,10 @@ export interface Note {
   created_at: string
 }
 
-// Notes are child-only, matching legacy (families/guardians never had
-// notes) and the backend, which hardcodes entity_type "child".
+// Notes are polymorphic on the backend (entity_type/entity_id) but each
+// entity type gets its own thin wrapper here rather than one generic
+// `listNotes(entityType, entityId)`.  Callers shouldn't need to know or
+// care that child notes and appointment call-log entries share a table.
 export function listChildNotes(childId: number): Promise<Note[]> {
   return apiFetch<Note[]>(`/children/${childId}/notes/`)
 }
@@ -635,3 +637,102 @@ export function addExperimentPrincipalInvestigator(experimentId: number, userId:
 export function removeExperimentPrincipalInvestigator(experimentId: number, userId: number): Promise<void> {
   return apiFetch<void>(`/experiments/${experimentId}/principal-investigators/${userId}`, { method: 'DELETE' })
 }
+
+// --- Availability ---
+//
+// General (weekly-recurring) and specific-date availability are
+// self-service: a lab member declares their own hours, and the backend
+// enforces that only they can remove their own row. Neither supports
+// editing -- add a new row / remove an old one, matching the backend's
+// create/list/deactivate-only shape (no PUT).
+
+export interface LabAvailabilityGeneral {
+  id: number
+  user_id: number
+  lab_id: number
+  weekday: number
+  start_time: string
+  end_time: string
+  created_at: string
+}
+
+export function listLabAvailabilityGeneral(labId: number): Promise<LabAvailabilityGeneral[]> {
+  return apiFetch<LabAvailabilityGeneral[]>(`/labs/${labId}/availability/general/`)
+}
+export function createLabAvailabilityGeneral(
+  labId: number,
+  weekday: number,
+  startTime: string,
+  endTime: string,
+): Promise<LabAvailabilityGeneral> {
+  return apiFetch<LabAvailabilityGeneral>(`/labs/${labId}/availability/general/`, {
+    method: 'POST',
+    body: JSON.stringify({ weekday, start_time: startTime, end_time: endTime }),
+  })
+}
+export function deactivateLabAvailabilityGeneral(id: number): Promise<void> {
+  return apiFetch<void>(`/availability/general/${id}/deactivate`, { method: 'POST' })
+}
+
+export interface LabAvailabilitySpecific {
+  id: number
+  user_id: number
+  lab_id: number
+  date: string
+  start_time: string
+  end_time: string
+  created_at: string
+}
+
+export function listLabAvailabilitySpecific(labId: number): Promise<LabAvailabilitySpecific[]> {
+  return apiFetch<LabAvailabilitySpecific[]>(`/labs/${labId}/availability/specific/`)
+}
+export function createLabAvailabilitySpecific(
+  labId: number,
+  date: string,
+  startTime: string,
+  endTime: string,
+): Promise<LabAvailabilitySpecific> {
+  return apiFetch<LabAvailabilitySpecific>(`/labs/${labId}/availability/specific/`, {
+    method: 'POST',
+    body: JSON.stringify({ date, start_time: startTime, end_time: endTime }),
+  })
+}
+export function deactivateLabAvailabilitySpecific(id: number): Promise<void> {
+  return apiFetch<void>(`/availability/specific/${id}/deactivate`, { method: 'POST' })
+}
+
+// --- Schedule blockings ---
+//
+// Lab-wide closures (holidays, etc.) -- same create/list/deactivate-only
+// shape as availability above, but lab-wide rather than self-service.
+
+export interface ScheduleBlocking {
+  id: number
+  lab_id: number
+  date: string
+  start_time: string
+  end_time: string
+  reason: string
+  created_at: string
+}
+
+export function listScheduleBlockings(labId: number): Promise<ScheduleBlocking[]> {
+  return apiFetch<ScheduleBlocking[]>(`/labs/${labId}/schedule-blockings/`)
+}
+export function createScheduleBlocking(
+  labId: number,
+  date: string,
+  startTime: string,
+  endTime: string,
+  reason: string,
+): Promise<ScheduleBlocking> {
+  return apiFetch<ScheduleBlocking>(`/labs/${labId}/schedule-blockings/`, {
+    method: 'POST',
+    body: JSON.stringify({ date, start_time: startTime, end_time: endTime, reason }),
+  })
+}
+export function deactivateScheduleBlocking(id: number): Promise<void> {
+  return apiFetch<void>(`/schedule-blockings/${id}/deactivate`, { method: 'POST' })
+}
+
