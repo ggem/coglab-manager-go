@@ -15,6 +15,36 @@ where lab_member_trainings.experiment_role_id = sqlc.arg(experiment_role_id)
   and users.deactivated_at is null
 order by users.id;
 
+-- name: ListLabMemberTrainingsForRoleByPriority :many
+-- Same candidate pool as ListLabMemberTrainingsForRole, but ordered by
+-- this lab's scheduling priority (lower priority scheduled first, e.g.
+-- undergrads before grad students) rather than plain user id --
+-- appointments_search.go uses this ordering directly as the
+-- scheduling.RoleCandidates candidate order, since FindAssignment
+-- fills each role from the front of its candidate list. left join, not
+-- join: a trained user missing a lab_memberships row for this lab
+-- (shouldn't happen, but isn't enforced by any FK) still comes back as
+-- a valid candidate -- just sorted last -- rather than silently
+-- vanishing from the candidate pool entirely.
+select users.* from users
+join lab_member_trainings on lab_member_trainings.user_id = users.id
+left join lab_memberships
+    on lab_memberships.user_id = users.id
+    and lab_memberships.lab_id = sqlc.arg(lab_id)
+where lab_member_trainings.experiment_role_id = sqlc.arg(experiment_role_id)
+  and users.deactivated_at is null
+order by
+    case lab_memberships.priority
+        when 'undergrad_no_project' then 0
+        when 'undergrad_with_project' then 1
+        when 'lab_coordinator' then 2
+        when 'graduate_student' then 3
+        when 'postdoc' then 4
+        when 'lab_director' then 5
+        else 6
+    end,
+    users.id;
+
 -- name: ListLabMemberTrainingsForUser :many
 select experiment_roles.* from experiment_roles
 join lab_member_trainings on lab_member_trainings.experiment_role_id = experiment_roles.id

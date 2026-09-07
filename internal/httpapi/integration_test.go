@@ -593,6 +593,169 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 	}
 }
 
+// TestSchedulingFlow_PriorityOrdering_Integration proves
+// ListLabMemberTrainingsForRoleByPriority's ordering actually reaches
+// the search: two equally-available candidates for the same role, one
+// left at the default 'undergrad_no_project' priority and one set to
+// 'lab_director', must resolve to the lower-priority (undergrad)
+// candidate -- real scheduling behavior per the M10 planning decision
+// that undergrads should be scheduled before grad students/directors
+// when either could do it.
+func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Priority Test Lab", fmt.Sprintf("ptl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("priority-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+	director, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("priority-director-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Director", LastName: "Candidate",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(director): %v", err)
+	}
+	undergrad, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("priority-undergrad-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Undergrad", LastName: "Candidate",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(undergrad): %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("priority-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership(actor): %v", err)
+	}
+	// director is inserted with an explicit high-seniority priority; the
+	// undergrad is left at the schema's default ('undergrad_no_project')
+	// to also prove the default itself sorts first.
+	if _, err := testPool.Exec(ctx,
+		"insert into lab_memberships (user_id, lab_id, role_id, priority) values ($1, $2, $3, 'lab_director')",
+		director.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership(director): %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", undergrad.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership(undergrad): %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	var role experimentRoleResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiment-roles/", labID), experimentRoleRequest{Name: "Experimenter"}), &role)
+
+	// director trained first -- if candidate order were plain insertion/id
+	// order instead of priority order, the director would be picked.
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", role.ID), addLabMemberTrainingRequest{UserID: director.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add director training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", role.ID), addLabMemberTrainingRequest{UserID: undergrad.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add undergrad training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	targetDate := time.Now().UTC().Truncate(24 * time.Hour)
+	weekday := int16(targetDate.Weekday())
+	for _, userID := range []int64{director.ID, undergrad.ID} {
+		if _, err := testPool.Exec(ctx,
+			"insert into lab_availability_general (user_id, lab_id, weekday, start_time, end_time) values ($1,$2,$3,$4,$5)",
+			userID, labID, weekday, "08:00", "18:00"); err != nil {
+			t.Fatalf("insert lab_availability_general for user %d: %v", userID, err)
+		}
+	}
+
+	minAge, maxAge := 6.0, 60.0
+	experimentRec := do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Priority Integration Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: &minAge, AgeRangeMaxMonths: &maxAge,
+	})
+	if experimentRec.Code != http.StatusCreated {
+		t.Fatalf("create experiment status = %d, want %d; body = %s", experimentRec.Code, http.StatusCreated, experimentRec.Body)
+	}
+	var experiment experimentResponse
+	decode(experimentRec, &experiment)
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/training-requirements/", experiment.ID), addTrainingRequirementRequest{ExperimentRoleID: role.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add training requirement status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	var family familyResponse
+	decode(do(http.MethodPost, "/families/", familyRequest{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"}), &family)
+	var child childResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "Kid", LastName: "Test", Sex: "unknown", Response: "unknown",
+	}), &child)
+
+	var appointment appointmentResponse
+	appointmentRec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{
+		ChildID: child.ID, SiblingComing: "not_coming",
+	})
+	if appointmentRec.Code != http.StatusCreated {
+		t.Fatalf("create appointment status = %d, want %d; body = %s", appointmentRec.Code, http.StatusCreated, appointmentRec.Body)
+	}
+	decode(appointmentRec, &appointment)
+
+	dateStr := targetDate.Format(dateLayout)
+	var candidates []candidateSlotResponse
+	searchRec := do(http.MethodGet, fmt.Sprintf("/appointments/%d/availability?start_date=%s&end_date=%s", appointment.ID, dateStr, dateStr), nil)
+	if searchRec.Code != http.StatusOK {
+		t.Fatalf("search availability status = %d, want %d; body = %s", searchRec.Code, http.StatusOK, searchRec.Body)
+	}
+	decode(searchRec, &candidates)
+	if len(candidates) == 0 {
+		t.Fatal("expected candidate slots: both candidates are free all day and the experiment needs only 30 minutes")
+	}
+	if got := candidates[0].Assignment[role.ID]; got != undergrad.ID {
+		t.Errorf("assignment[role %d] = %d, want undergrad %d (lower priority should be scheduled first, not director %d)",
+			role.ID, got, undergrad.ID, director.ID)
+	}
+}
+
 func TestMatchingFlow_Integration(t *testing.T) {
 	ctx := context.Background()
 

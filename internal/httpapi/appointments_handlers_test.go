@@ -268,7 +268,7 @@ func TestHandleScheduleAppointment_ExperimenterInsertFails(t *testing.T) {
 	q.ListExperimentTrainingRequirementsFunc = func(ctx context.Context, experimentID int64) ([]db.ExperimentRole, error) {
 		return []db.ExperimentRole{role}, nil
 	}
-	q.ListLabMemberTrainingsForRoleFunc = func(ctx context.Context, experimentRoleID int64) ([]db.User, error) {
+	q.ListLabMemberTrainingsForRoleByPriorityFunc = func(ctx context.Context, arg db.ListLabMemberTrainingsForRoleByPriorityParams) ([]db.User, error) {
 		return []db.User{member}, nil
 	}
 	q.ListLabAvailabilitySpecificForDateRangeFunc = func(ctx context.Context, arg db.ListLabAvailabilitySpecificForDateRangeParams) ([]db.LabAvailabilitySpecific, error) {

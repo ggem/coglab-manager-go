@@ -64,6 +64,72 @@ func (q *Queries) ListLabMemberTrainingsForRole(ctx context.Context, experimentR
 	return items, nil
 }
 
+const listLabMemberTrainingsForRoleByPriority = `-- name: ListLabMemberTrainingsForRoleByPriority :many
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+join lab_member_trainings on lab_member_trainings.user_id = users.id
+left join lab_memberships
+    on lab_memberships.user_id = users.id
+    and lab_memberships.lab_id = $1
+where lab_member_trainings.experiment_role_id = $2
+  and users.deactivated_at is null
+order by
+    case lab_memberships.priority
+        when 'undergrad_no_project' then 0
+        when 'undergrad_with_project' then 1
+        when 'lab_coordinator' then 2
+        when 'graduate_student' then 3
+        when 'postdoc' then 4
+        when 'lab_director' then 5
+        else 6
+    end,
+    users.id
+`
+
+type ListLabMemberTrainingsForRoleByPriorityParams struct {
+	LabID            int64 `json:"lab_id"`
+	ExperimentRoleID int64 `json:"experiment_role_id"`
+}
+
+// Same candidate pool as ListLabMemberTrainingsForRole, but ordered by
+// this lab's scheduling priority (lower priority scheduled first, e.g.
+// undergrads before grad students) rather than plain user id --
+// appointments_search.go uses this ordering directly as the
+// scheduling.RoleCandidates candidate order, since FindAssignment
+// fills each role from the front of its candidate list. left join, not
+// join: a trained user missing a lab_memberships row for this lab
+// (shouldn't happen, but isn't enforced by any FK) still comes back as
+// a valid candidate -- just sorted last -- rather than silently
+// vanishing from the candidate pool entirely.
+func (q *Queries) ListLabMemberTrainingsForRoleByPriority(ctx context.Context, arg ListLabMemberTrainingsForRoleByPriorityParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listLabMemberTrainingsForRoleByPriority, arg.LabID, arg.ExperimentRoleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.PasswordHash,
+			&i.IsPlatformAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeactivatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLabMemberTrainingsForUser = `-- name: ListLabMemberTrainingsForUser :many
 select experiment_roles.id, experiment_roles.lab_id, experiment_roles.name, experiment_roles.deactivated_at, experiment_roles.created_at, experiment_roles.updated_at, experiment_roles.is_sitter_role from experiment_roles
 join lab_member_trainings on lab_member_trainings.experiment_role_id = experiment_roles.id

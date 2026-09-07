@@ -205,6 +205,17 @@ type Querier interface {
 	// The trained-member pool for one experiment_role -- the candidate list
 	// the scheduling search's backtracking draws from for that role.
 	ListLabMemberTrainingsForRole(ctx context.Context, experimentRoleID int64) ([]User, error)
+	// Same candidate pool as ListLabMemberTrainingsForRole, but ordered by
+	// this lab's scheduling priority (lower priority scheduled first, e.g.
+	// undergrads before grad students) rather than plain user id --
+	// appointments_search.go uses this ordering directly as the
+	// scheduling.RoleCandidates candidate order, since FindAssignment
+	// fills each role from the front of its candidate list. left join, not
+	// join: a trained user missing a lab_memberships row for this lab
+	// (shouldn't happen, but isn't enforced by any FK) still comes back as
+	// a valid candidate -- just sorted last -- rather than silently
+	// vanishing from the candidate pool entirely.
+	ListLabMemberTrainingsForRoleByPriority(ctx context.Context, arg ListLabMemberTrainingsForRoleByPriorityParams) ([]User, error)
 	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
 	// The candidate pool a picker (e.g. principal investigators) draws
 	// from -- full User rows, same "select users.*, filter deactivated"

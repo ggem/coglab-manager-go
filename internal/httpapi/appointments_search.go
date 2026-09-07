@@ -67,9 +67,16 @@ func (s *Server) buildAvailabilitySearch(
 		return availabilitySearchInputs{}, err
 	}
 
+	// Candidate order within a role is the scheduling preference order
+	// FindAssignment consumes (it fills from the front of the list), so
+	// candidates come back sorted by this lab's priority -- lower
+	// priority scheduled first (e.g. undergrads before grad students) --
+	// rather than plain user id.
 	roleCandidates := make(map[int64][]db.User, len(roleRows))
 	for _, role := range roleRows {
-		members, err := s.queries.ListLabMemberTrainingsForRole(ctx, role.ID)
+		members, err := s.queries.ListLabMemberTrainingsForRoleByPriority(ctx, db.ListLabMemberTrainingsForRoleByPriorityParams{
+			ExperimentRoleID: role.ID, LabID: experiment.LabID,
+		})
 		if err != nil {
 			return availabilitySearchInputs{}, err
 		}
@@ -77,7 +84,9 @@ func (s *Server) buildAvailabilitySearch(
 	}
 	var sitterCandidates []db.User
 	if hasSitterRole {
-		sitterCandidates, err = s.queries.ListLabMemberTrainingsForRole(ctx, sitterRoleRow.ID)
+		sitterCandidates, err = s.queries.ListLabMemberTrainingsForRoleByPriority(ctx, db.ListLabMemberTrainingsForRoleByPriorityParams{
+			ExperimentRoleID: sitterRoleRow.ID, LabID: experiment.LabID,
+		})
 		if err != nil {
 			return availabilitySearchInputs{}, err
 		}

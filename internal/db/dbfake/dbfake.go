@@ -147,10 +147,11 @@ type Querier struct {
 	SetExperimentRoleSitterFunc  func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error)
 	GetSitterRoleForLabFunc      func(ctx context.Context, labID int64) (db.ExperimentRole, error)
 
-	AddLabMemberTrainingFunc          func(ctx context.Context, arg db.AddLabMemberTrainingParams) error
-	RemoveLabMemberTrainingFunc       func(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error
-	ListLabMemberTrainingsForRoleFunc func(ctx context.Context, experimentRoleID int64) ([]db.User, error)
-	ListLabMemberTrainingsForUserFunc func(ctx context.Context, userID int64) ([]db.ExperimentRole, error)
+	AddLabMemberTrainingFunc                    func(ctx context.Context, arg db.AddLabMemberTrainingParams) error
+	RemoveLabMemberTrainingFunc                 func(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error
+	ListLabMemberTrainingsForRoleFunc           func(ctx context.Context, experimentRoleID int64) ([]db.User, error)
+	ListLabMemberTrainingsForRoleByPriorityFunc func(ctx context.Context, arg db.ListLabMemberTrainingsForRoleByPriorityParams) ([]db.User, error)
+	ListLabMemberTrainingsForUserFunc           func(ctx context.Context, userID int64) ([]db.ExperimentRole, error)
 
 	CreateLabAvailabilityGeneralFunc     func(ctx context.Context, arg db.CreateLabAvailabilityGeneralParams) (db.LabAvailabilityGeneral, error)
 	GetLabAvailabilityGeneralByIDFunc    func(ctx context.Context, id int64) (db.LabAvailabilityGeneral, error)
@@ -943,6 +944,13 @@ func (q *Querier) ListLabMemberTrainingsForRole(ctx context.Context, experimentR
 		panic("dbfake: ListLabMemberTrainingsForRole not implemented")
 	}
 	return q.ListLabMemberTrainingsForRoleFunc(ctx, experimentRoleID)
+}
+
+func (q *Querier) ListLabMemberTrainingsForRoleByPriority(ctx context.Context, arg db.ListLabMemberTrainingsForRoleByPriorityParams) ([]db.User, error) {
+	if q.ListLabMemberTrainingsForRoleByPriorityFunc == nil {
+		panic("dbfake: ListLabMemberTrainingsForRoleByPriority not implemented")
+	}
+	return q.ListLabMemberTrainingsForRoleByPriorityFunc(ctx, arg)
 }
 
 func (q *Querier) ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]db.ExperimentRole, error) {
