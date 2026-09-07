@@ -73,14 +73,25 @@ export default function LabSetup() {
 
   return (
     <div className="lab-setup">
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Lab setup">
         {TABS.map((t) => (
-          <button key={t.key} type="button" className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            id={`lab-setup-tab-${t.key}`}
+            aria-selected={tab === t.key}
+            aria-controls={`lab-setup-panel-${t.key}`}
+            tabIndex={tab === t.key ? 0 : -1}
+            className={tab === t.key ? 'active' : ''}
+            onClick={() => setTab(t.key)}
+          >
             {t.label}
           </button>
         ))}
       </div>
 
+      <div role="tabpanel" id={`lab-setup-panel-${tab}`} aria-labelledby={`lab-setup-tab-${tab}`}>
       {tab === 'conditions' && (
         <LookupTable
           queryKey={['conditions', id]}
@@ -179,6 +190,7 @@ export default function LabSetup() {
           remove={deactivateScheduleBlocking}
         />
       )}
+      </div>
     </div>
   )
 }

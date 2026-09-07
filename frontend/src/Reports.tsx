@@ -2,6 +2,7 @@ import { useState, type SubmitEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import LookupTable from './LookupTable'
+import DemographicsReport from './DemographicsReport'
 import {
   createNewsletter,
   deactivateNewsletter,
@@ -10,6 +11,7 @@ import {
   exportNIHReportUrl,
   getHRCReport,
   getZipCodesReport,
+  listExperiments,
   listGrants,
   listNewsletters,
   listRecruitmentSources,
@@ -18,12 +20,13 @@ import {
   type Newsletter,
 } from './api'
 
-type Tab = 'nih' | 'hrc' | 'zipcodes' | 'newsletters'
+type Tab = 'nih' | 'hrc' | 'zipcodes' | 'demographics' | 'newsletters'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'nih', label: 'NIH' },
   { key: 'hrc', label: 'HRC' },
   { key: 'zipcodes', label: 'Zip Codes' },
+  { key: 'demographics', label: 'Demographics' },
   { key: 'newsletters', label: 'Newsletters' },
 ]
 
@@ -34,18 +37,31 @@ export default function Reports() {
 
   return (
     <div className="reports">
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Reports">
         {TABS.map((t) => (
-          <button key={t.key} type="button" className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            id={`reports-tab-${t.key}`}
+            aria-selected={tab === t.key}
+            aria-controls={`reports-panel-${t.key}`}
+            tabIndex={tab === t.key ? 0 : -1}
+            className={tab === t.key ? 'active' : ''}
+            onClick={() => setTab(t.key)}
+          >
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'nih' && <NIHReportTab labId={id} />}
-      {tab === 'hrc' && <HRCReportTab labId={id} />}
-      {tab === 'zipcodes' && <ZipCodesReportTab labId={id} />}
-      {tab === 'newsletters' && <NewslettersTab labId={id} />}
+      <div role="tabpanel" id={`reports-panel-${tab}`} aria-labelledby={`reports-tab-${tab}`}>
+        {tab === 'nih' && <NIHReportTab labId={id} />}
+        {tab === 'hrc' && <HRCReportTab labId={id} />}
+        {tab === 'zipcodes' && <ZipCodesReportTab labId={id} />}
+        {tab === 'demographics' && <DemographicsReportTab labId={id} />}
+        {tab === 'newsletters' && <NewslettersTab labId={id} />}
+      </div>
     </div>
   )
 }
@@ -240,6 +256,34 @@ function ZipCodesReportTab({ labId }: { labId: number }) {
           </tbody>
         </table>
       )}
+    </div>
+  )
+}
+
+// Demographics is experiment-scoped (not lab-scoped like the other three
+// reports), so this tab is just an experiment picker in front of the same
+// DemographicsReport component ExperimentDetail already renders directly
+// -- reused as-is rather than duplicated, so both call sites stay in sync.
+function DemographicsReportTab({ labId }: { labId: number }) {
+  const { data: experiments } = useQuery({ queryKey: ['experiments', labId], queryFn: () => listExperiments(labId) })
+  const [experimentId, setExperimentId] = useState('')
+
+  return (
+    <div>
+      <label>
+        Experiment
+        <select value={experimentId} onChange={(e) => setExperimentId(e.target.value)}>
+          <option value="">Select an experiment…</option>
+          {experiments
+            ?.filter((e) => !e.deactivated)
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+        </select>
+      </label>
+      {experimentId !== '' && <DemographicsReport experimentId={Number(experimentId)} />}
     </div>
   )
 }
