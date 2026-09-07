@@ -15,7 +15,7 @@ const arriveAppointment = `-- name: ArriveAppointment :one
 update appointments
 set status = 'arrived'
 where id = $1 and status = 'pending'
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
 `
 
 // Only a scheduled ('pending') appointment can arrive -- an unscheduled
@@ -40,6 +40,10 @@ func (q *Queries) ArriveAppointment(ctx context.Context, id int64) (Appointment,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
 	)
 	return i, err
 }
@@ -50,7 +54,7 @@ values (
     $1, $2, $3,
     $4, $5, $6
 )
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
 `
 
 type CreateAppointmentParams struct {
@@ -87,6 +91,10 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
 	)
 	return i, err
 }
@@ -123,7 +131,7 @@ func (q *Queries) CreateAppointmentExperimenter(ctx context.Context, arg CreateA
 }
 
 const getAppointmentByID = `-- name: GetAppointmentByID :one
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at from appointments where id = $1
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id from appointments where id = $1
 `
 
 func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment, error) {
@@ -144,6 +152,10 @@ func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
 	)
 	return i, err
 }
@@ -214,7 +226,7 @@ func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentI
 }
 
 const listAppointmentsByChild = `-- name: ListAppointmentsByChild :many
-select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, experiments.name as experiment_name
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, experiments.name as experiment_name
 from appointments
 join experiments on experiments.id = appointments.experiment_id
 where appointments.child_id = $1
@@ -237,6 +249,10 @@ type ListAppointmentsByChildRow struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus        string             `json:"data_status"`
+	TypeOfCar         string             `json:"type_of_car"`
+	ParticipantNumber string             `json:"participant_number"`
+	TokenID           *int64             `json:"token_id"`
 	ExperimentName    string             `json:"experiment_name"`
 }
 
@@ -267,6 +283,10 @@ func (q *Queries) ListAppointmentsByChild(ctx context.Context, childID int64) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ReminderSentAt,
+			&i.DataStatus,
+			&i.TypeOfCar,
+			&i.ParticipantNumber,
+			&i.TokenID,
 			&i.ExperimentName,
 		); err != nil {
 			return nil, err
@@ -280,7 +300,7 @@ func (q *Queries) ListAppointmentsByChild(ctx context.Context, childID int64) ([
 }
 
 const listAppointmentsByExperiment = `-- name: ListAppointmentsByExperiment :many
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at from appointments
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id from appointments
 where experiment_id = $1
   and ($2::text is null or status = $2)
 order by created_at
@@ -315,6 +335,10 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ReminderSentAt,
+			&i.DataStatus,
+			&i.TypeOfCar,
+			&i.ParticipantNumber,
+			&i.TokenID,
 		); err != nil {
 			return nil, err
 		}
@@ -327,7 +351,7 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 }
 
 const listAppointmentsBySiblings = `-- name: ListAppointmentsBySiblings :many
-select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, experiments.name as experiment_name,
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, experiments.name as experiment_name,
        children.first_name as child_first_name, children.last_name as child_last_name
 from appointments
 join experiments on experiments.id = appointments.experiment_id
@@ -353,6 +377,10 @@ type ListAppointmentsBySiblingsRow struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus        string             `json:"data_status"`
+	TypeOfCar         string             `json:"type_of_car"`
+	ParticipantNumber string             `json:"participant_number"`
+	TokenID           *int64             `json:"token_id"`
 	ExperimentName    string             `json:"experiment_name"`
 	ChildFirstName    string             `json:"child_first_name"`
 	ChildLastName     string             `json:"child_last_name"`
@@ -385,6 +413,10 @@ func (q *Queries) ListAppointmentsBySiblings(ctx context.Context, childID int64)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ReminderSentAt,
+			&i.DataStatus,
+			&i.TypeOfCar,
+			&i.ParticipantNumber,
+			&i.TokenID,
 			&i.ExperimentName,
 			&i.ChildFirstName,
 			&i.ChildLastName,
@@ -508,7 +540,7 @@ const releaseAppointment = `-- name: ReleaseAppointment :one
 update appointments
 set status = 'released'
 where id = $1 and status in ('to_be_scheduled', 'pending')
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
 `
 
 // Deliberately allows releasing a 'pending' (already time-scheduled)
@@ -533,6 +565,10 @@ func (q *Queries) ReleaseAppointment(ctx context.Context, id int64) (Appointment
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
 	)
 	return i, err
 }
@@ -544,7 +580,7 @@ set schedule_date = $1,
     schedule_time_end = $3,
     status = 'pending'
 where id = $4
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
 `
 
 type ScheduleAppointmentParams struct {
@@ -581,6 +617,10 @@ func (q *Queries) ScheduleAppointment(ctx context.Context, arg ScheduleAppointme
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
 	)
 	return i, err
 }

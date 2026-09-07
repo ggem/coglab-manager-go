@@ -25,6 +25,10 @@ type Appointment struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus        string             `json:"data_status"`
+	TypeOfCar         string             `json:"type_of_car"`
+	ParticipantNumber string             `json:"participant_number"`
+	TokenID           *int64             `json:"token_id"`
 }
 
 type AppointmentExperimenter struct {
@@ -137,9 +141,19 @@ type ExperimentEquipmentRequirement struct {
 	EquipmentID  int64 `json:"equipment_id"`
 }
 
+type ExperimentExclusion struct {
+	ExperimentID         int64 `json:"experiment_id"`
+	ExcludedExperimentID int64 `json:"excluded_experiment_id"`
+}
+
 type ExperimentGrant struct {
 	ExperimentID int64 `json:"experiment_id"`
 	GrantID      int64 `json:"grant_id"`
+}
+
+type ExperimentInclusion struct {
+	ExperimentID         int64 `json:"experiment_id"`
+	IncludedExperimentID int64 `json:"included_experiment_id"`
 }
 
 type ExperimentPrincipalInvestigator struct {
@@ -250,6 +264,7 @@ type LabMembership struct {
 	RoleID    int64              `json:"role_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Priority  string             `json:"priority"`
 }
 
 type Newsletter struct {
@@ -326,6 +341,15 @@ type Session struct {
 	IpAddress  *netip.Addr        `json:"ip_address"`
 	UserAgent  *string            `json:"user_agent"`
 	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type Token struct {
+	ID            int64              `json:"id"`
+	LabID         int64              `json:"lab_id"`
+	Name          string             `json:"name"`
+	DeactivatedAt pgtype.Timestamptz `json:"deactivated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

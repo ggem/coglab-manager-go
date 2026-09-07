@@ -10,7 +10,7 @@ import (
 )
 
 const getLabMembership = `-- name: GetLabMembership :one
-select id, user_id, lab_id, role_id, created_at, updated_at from lab_memberships where user_id = $1 and lab_id = $2
+select id, user_id, lab_id, role_id, created_at, updated_at, priority from lab_memberships where user_id = $1 and lab_id = $2
 `
 
 type GetLabMembershipParams struct {
@@ -28,6 +28,7 @@ func (q *Queries) GetLabMembership(ctx context.Context, arg GetLabMembershipPara
 		&i.RoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Priority,
 	)
 	return i, err
 }
