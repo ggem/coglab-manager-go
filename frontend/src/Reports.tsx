@@ -253,10 +253,18 @@ function NewslettersTab({ labId }: { labId: number }) {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const markSentMutation = useMutation({
-    mutationFn: () => markNewsletterSent(Number(newsletterId), startDate, endDate),
-    onSuccess: (result) => {
+    mutationFn: (vars: { newsletterId: number; startDate: string; endDate: string }) =>
+      markNewsletterSent(vars.newsletterId, vars.startDate, vars.endDate),
+    // Built from the mutation's own variables, not the live newsletterId/
+    // startDate/endDate state -- otherwise the message would silently
+    // relabel itself to whatever the user has since typed into the
+    // filters, misrepresenting what was actually marked sent.
+    onSuccess: (result, vars) => {
+      const name = newsletters?.find((n) => n.id === vars.newsletterId)?.name ?? 'newsletter'
       setActionError(null)
-      setMarkResult(`Marked ${result.marked_sent} famil${result.marked_sent === 1 ? 'y' : 'ies'} as sent.`)
+      setMarkResult(
+        `Marked ${result.marked_sent} famil${result.marked_sent === 1 ? 'y' : 'ies'} as sent for "${name}" (visits ${vars.startDate} to ${vars.endDate}).`,
+      )
     },
     onError: (err) => setActionError(errorMessage(err, 'Failed to mark sent.')),
   })
@@ -317,7 +325,7 @@ function NewslettersTab({ labId }: { labId: number }) {
         )}
         <button
           type="button"
-          onClick={() => markSentMutation.mutate()}
+          onClick={() => markSentMutation.mutate({ newsletterId: Number(newsletterId), startDate, endDate })}
           disabled={!canExport || newsletterId === '' || markSentMutation.isPending}
         >
           {markSentMutation.isPending ? 'Marking…' : 'Mark Sent'}
