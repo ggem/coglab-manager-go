@@ -924,23 +924,30 @@ func TestReportingFlow_Integration(t *testing.T) {
 		}
 	}
 
-	// NIH: white has both children (1 male, 1 female); asian has only
-	// ChildB (1 male). Totals must be distinct-child (1 male, 1 female),
-	// not a sum across categories.
-	var nih nihReportResponse
-	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/reports/nih?start_date=%s&end_date=%s&grant_id=%d", labID, windowStart, windowEnd, grant.ID), nil), &nih)
-	byCategory := map[string]nihReportCategoryRow{}
-	for _, c := range nih.Categories {
-		byCategory[c.Category] = c
+	// NIH: participant-level CSV, one row per child. ChildA is single-race
+	// (White); ChildB is multi-race (white+asian -> "More than one race").
+	// Both were born an exact whole number of years before "today", so
+	// their age-in-months at the (also "today") appointment is exact.
+	nihRec := do(http.MethodGet, fmt.Sprintf("/labs/%d/reports/nih/export?start_date=%s&end_date=%s&grant_id=%d", labID, windowStart, windowEnd, grant.ID), nil)
+	if nihRec.Code != http.StatusOK {
+		t.Fatalf("nih export status = %d, want %d; body = %s", nihRec.Code, http.StatusOK, nihRec.Body)
 	}
-	if white := byCategory["white"]; white.Male != 1 || white.Female != 1 {
-		t.Errorf("NIH white row = %+v, want male=1 female=1", white)
+	nihRows, err := csv.NewReader(nihRec.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse nih export csv: %v", err)
 	}
-	if asian := byCategory["asian"]; asian.Male != 1 || asian.Female != 0 {
-		t.Errorf("NIH asian row = %+v, want male=1 female=0", asian)
+	if len(nihRows) != 3 || nihRows[0][0] != "Race" {
+		t.Fatalf("nih export rows = %+v, want a header row plus 2 participants", nihRows)
 	}
-	if nih.Totals.Male != 1 || nih.Totals.Female != 1 {
-		t.Errorf("NIH totals = %+v, want male=1 female=1 (distinct children, not summed)", nih.Totals)
+	byRace := map[string][]string{}
+	for _, row := range nihRows[1:] {
+		byRace[row[0]] = row
+	}
+	if white := byRace["White"]; white == nil || white[2] != "Female" || white[3] != "24" || white[4] != "Months" {
+		t.Errorf("NIH White row = %+v, want Female/24/Months", white)
+	}
+	if multi := byRace["More than one race"]; multi == nil || multi[2] != "Male" || multi[3] != "36" || multi[4] != "Months" {
+		t.Errorf("NIH More than one race row = %+v, want Male/36/Months", multi)
 	}
 
 	// HRC: both appointments are under our one protocol.

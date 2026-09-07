@@ -200,7 +200,7 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/export", s.handleExportNewsletter)
 			})
 			r.Route("/reports", func(r chi.Router) {
-				r.Get("/nih", s.handleNIHReport)
+				r.Get("/nih/export", s.handleExportNIHReport)
 				r.Get("/hrc", s.handleHRCReport)
 				r.Get("/zip-codes", s.handleZipCodesReport)
 			})

@@ -7,8 +7,8 @@ import {
   deactivateNewsletter,
   errorMessage,
   exportNewsletterUrl,
+  exportNIHReportUrl,
   getHRCReport,
-  getNIHReport,
   getZipCodesReport,
   listGrants,
   listNewsletters,
@@ -57,91 +57,47 @@ export default function Reports() {
 // AppointmentScheduleFlow.tsx (FM5) already uses for its own filtered
 // search.
 
+// NIH now requires the current-shape participant-level data template
+// (encodable only as a CSV, not typed from an on-screen table -- see
+// exportNIHReportUrl), so this tab is filters + a download link, the
+// same shape NewslettersTab's export control already uses below.
 function NIHReportTab({ labId }: { labId: number }) {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [grantId, setGrantId] = useState('')
-  const [ran, setRan] = useState(false)
 
   const { data: grants } = useQuery({ queryKey: ['grants', labId], queryFn: () => listGrants(labId) })
-  const {
-    data: report,
-    isFetching,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['nih-report', labId, startDate, endDate, grantId],
-    queryFn: () => getNIHReport(labId, startDate, endDate, grantId === '' ? null : Number(grantId)),
-    enabled: false,
-  })
-
-  function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setRan(true)
-    void refetch()
-  }
+  const canExport = startDate !== '' && endDate !== ''
 
   return (
-    <div>
-      <form onSubmit={handleSubmit} className="report-filters">
-        <label>
-          Start date
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-        </label>
-        <label>
-          End date
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
-        </label>
-        <label>
-          Grant
-          <select value={grantId} onChange={(e) => setGrantId(e.target.value)}>
-            <option value="">All grants</option>
-            {grants?.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" disabled={isFetching}>
-          {isFetching ? 'Running…' : 'Run report'}
+    <div className="report-filters">
+      <label>
+        Start date
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+      </label>
+      <label>
+        End date
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+      </label>
+      <label>
+        Grant
+        <select value={grantId} onChange={(e) => setGrantId(e.target.value)}>
+          <option value="">All grants</option>
+          {grants?.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {canExport ? (
+        <a href={exportNIHReportUrl(labId, startDate, endDate, grantId === '' ? null : Number(grantId))} className="add-family">
+          Download CSV
+        </a>
+      ) : (
+        <button type="button" disabled>
+          Download CSV
         </button>
-      </form>
-      {error && (
-        <p className="error" role="alert">
-          {errorMessage(error, 'Failed to load report.')}
-        </p>
-      )}
-      {ran && report && (
-        <table>
-          <caption>NIH race/ethnicity report</caption>
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Male</th>
-              <th>Female</th>
-              <th>Unknown</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.categories.map((c) => (
-              <tr key={c.category}>
-                <td>{c.category}</td>
-                <td>{c.male}</td>
-                <td>{c.female}</td>
-                <td>{c.unknown}</td>
-              </tr>
-            ))}
-            <tr>
-              <td>
-                <strong>Total distinct children</strong>
-              </td>
-              <td>{report.totals.male}</td>
-              <td>{report.totals.female}</td>
-              <td>{report.totals.unknown}</td>
-            </tr>
-          </tbody>
-        </table>
       )}
     </div>
   )

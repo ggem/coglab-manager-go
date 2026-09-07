@@ -7,86 +7,68 @@ import (
 
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // --- NIH ---
 
-func TestHandleNIHReport_Success(t *testing.T) {
-	var byCategoryArg db.NIHReportByCategoryParams
-	var totalsArg db.NIHReportTotalsParams
+func TestHandleExportNIHReport_Success(t *testing.T) {
+	var gotArg db.NIHParticipantReportParams
 	q := &dbfake.Querier{
-		NIHReportByCategoryFunc: func(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error) {
-			byCategoryArg = arg
-			return []db.NIHReportByCategoryRow{
-				{Category: "white", Male: 2, Female: 1, Unknown: 0},
-				{Category: "asian", Male: 1, Female: 0, Unknown: 0},
+		NIHParticipantReportFunc: func(ctx context.Context, arg db.NIHParticipantReportParams) ([]db.NIHParticipantReportRow, error) {
+			gotArg = arg
+			return []db.NIHParticipantReportRow{
+				// Multi-race + Hispanic, whole-months age.
+				{ChildID: 1, Sex: "female", RaceEthnicity: []string{"white", "asian", "hispanic_or_latino"}, BirthDate: birthDate(t, "2024-01-15"), ScheduleDate: birthDate(t, "2026-02-15")},
+				// MENA-only race, per the confirmed White mapping.
+				{ChildID: 2, Sex: "male", RaceEthnicity: []string{"middle_eastern_or_north_african"}, BirthDate: birthDate(t, "2025-06-01"), ScheduleDate: birthDate(t, "2026-01-01")},
+				// No birth_date on file -- Age blank, Unknown unit, not a 500.
+				{ChildID: 3, Sex: "unknown", RaceEthnicity: nil, BirthDate: pgtype.Date{}, ScheduleDate: birthDate(t, "2026-01-01")},
 			}, nil
-		},
-		NIHReportTotalsFunc: func(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error) {
-			totalsArg = arg
-			return db.NIHReportTotalsRow{Male: 3, Female: 1, Unknown: 0}, nil
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
 
 	grantID := int64(4)
-	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih?start_date=2026-01-01&end_date=2026-02-01&grant_id=4", cookie, nil)
+	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih/export?start_date=2026-01-01&end_date=2026-02-01&grant_id=4", cookie, nil)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
 	}
-	if byCategoryArg.LabID != 9 || byCategoryArg.GrantID == nil || *byCategoryArg.GrantID != grantID {
-		t.Errorf("NIHReportByCategory params = %+v", byCategoryArg)
+	if gotArg.LabID != 9 || gotArg.GrantID == nil || *gotArg.GrantID != grantID {
+		t.Errorf("NIHParticipantReport params = %+v", gotArg)
 	}
-	if totalsArg.LabID != 9 || totalsArg.GrantID == nil || *totalsArg.GrantID != grantID {
-		t.Errorf("NIHReportTotals params = %+v", totalsArg)
+	if ct := rec.Header().Get("Content-Type"); ct != "text/csv" {
+		t.Errorf("Content-Type = %q, want text/csv", ct)
 	}
-	got := decodeBody[nihReportResponse](t, rec)
-	if len(got.Categories) != 2 || got.Categories[0].Category != "white" || got.Categories[0].Male != 2 {
-		t.Errorf("Categories = %+v", got.Categories)
-	}
-	if got.Totals.Male != 3 || got.Totals.Female != 1 {
-		t.Errorf("Totals = %+v", got.Totals)
+	want := "Race,Ethnicity,Sex,Age,Age Unit\n" +
+		"More than one race,Hispanic or Latino,Female,25,Months\n" +
+		"White,Not Hispanic or Latino,Male,7,Months\n" +
+		"Unknown,Unknown,Unknown,,Unknown\n"
+	if got := rec.Body.String(); got != want {
+		t.Errorf("body =\n%s\nwant\n%s", got, want)
 	}
 }
 
-func TestHandleNIHReport_MissingDateRange(t *testing.T) {
+func TestHandleExportNIHReport_MissingDateRange(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
 
-	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih?start_date=2026-01-01", cookie, nil)
+	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih/export?start_date=2026-01-01", cookie, nil)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
-func TestHandleNIHReport_ByCategoryUnexpectedDBError(t *testing.T) {
+func TestHandleExportNIHReport_UnexpectedDBError(t *testing.T) {
 	q := &dbfake.Querier{
-		NIHReportByCategoryFunc: func(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error) {
+		NIHParticipantReportFunc: func(ctx context.Context, arg db.NIHParticipantReportParams) ([]db.NIHParticipantReportRow, error) {
 			return nil, assertErr("connection reset by peer")
 		},
 	}
 	s, cookie := newAuthenticatedTestServer(q, 7)
 
-	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih?start_date=2026-01-01&end_date=2026-02-01", cookie, nil)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
-	}
-}
-
-func TestHandleNIHReport_TotalsUnexpectedDBError(t *testing.T) {
-	q := &dbfake.Querier{
-		NIHReportByCategoryFunc: func(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error) {
-			return nil, nil
-		},
-		NIHReportTotalsFunc: func(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error) {
-			return db.NIHReportTotalsRow{}, assertErr("connection reset by peer")
-		},
-	}
-	s, cookie := newAuthenticatedTestServer(q, 7)
-
-	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih?start_date=2026-01-01&end_date=2026-02-01", cookie, nil)
+	rec := doRequest(t, s, http.MethodGet, "/labs/9/reports/nih/export?start_date=2026-01-01&end_date=2026-02-01", cookie, nil)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)

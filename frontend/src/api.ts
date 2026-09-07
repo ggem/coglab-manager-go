@@ -903,27 +903,19 @@ export function markNewsletterSent(
 
 // --- Reports ---
 
-export interface NIHReportCategory {
-  category: string
-  male: number
-  female: number
-  unknown: number
-}
-
-export interface NIHReport {
-  categories: NIHReportCategory[]
-  totals: NIHReportCategory
-}
-
-export function getNIHReport(
+// NIH now requires the current-shape participant-level data template (one
+// row per participant, fixed Race/Ethnicity/Sex/Age/Age Unit vocabulary)
+// rather than an on-screen aggregate table, so -- like the newsletter
+// export -- this is a plain download link, not a fetch.
+export function exportNIHReportUrl(
   labId: number,
   startDate: string,
   endDate: string,
   grantId: number | null,
-): Promise<NIHReport> {
+): string {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
   if (grantId !== null) params.set('grant_id', String(grantId))
-  return apiFetch<NIHReport>(`/labs/${labId}/reports/nih?${params.toString()}`)
+  return `/labs/${labId}/reports/nih/export?${params.toString()}`
 }
 
 export interface HRCReportProtocol {

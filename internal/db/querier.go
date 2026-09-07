@@ -233,19 +233,18 @@ type Querier interface {
 	ListZipCodesByLab(ctx context.Context, labID int64) ([]Zipcode, error)
 	MarkAppointmentReminderSent(ctx context.Context, id int64) error
 	MarkNewsletterSent(ctx context.Context, arg MarkNewsletterSentParams) error
-	// Per-race_ethnicity-category enrollment counts, cross-tabbed by sex, over
-	// 'arrived' appointments in a date range -- the current-shape NIH PHS
-	// Inclusion Enrollment Report (built against the merged race_ethnicity[]
-	// column, not legacy's old separate ethnicity/race/other_race split). A
-	// child selecting more than one category is counted in each -- this is
-	// per-category, not mutually exclusive, so rows don't sum to the total
-	// (see NIHReportTotals for that).
-	NIHReportByCategory(ctx context.Context, arg NIHReportByCategoryParams) ([]NIHReportByCategoryRow, error)
-	// Distinct-child totals by sex, same filters as NIHReportByCategory --
-	// a naive sum of the per-category rows would double-count a child who
-	// selected more than one race_ethnicity category, so this is computed
-	// separately rather than derived from the category rows.
-	NIHReportTotals(ctx context.Context, arg NIHReportTotalsParams) (NIHReportTotalsRow, error)
+	// One row per distinct child with an 'arrived' appointment in range --
+	// the current-shape NIH participant-level data template, which must be
+	// submitted as a flat CSV (one row per participant) rather than the
+	// old aggregate category/sex crosstab. Race/ethnicity/sex label
+	// mapping and age-unit computation happen in Go (see nih_report.go),
+	// not here, so a null birth_date can be handled explicitly rather than
+	// relying on sqlc's nullability inference over a computed expression.
+	// When a child has more than one qualifying appointment in the window,
+	// the earliest one is used for age-at-visit (distinct on + order by
+	// schedule_date), matching the distinct-child counting the old
+	// aggregate queries already used.
+	NIHParticipantReport(ctx context.Context, arg NIHParticipantReportParams) ([]NIHParticipantReportRow, error)
 	// Deliberately allows releasing a 'pending' (already time-scheduled)
 	// appointment, not just an unscheduled one -- matches legacy's per-child
 	// release, which does the same. Frees the child up again: 'released'

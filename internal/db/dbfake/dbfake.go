@@ -104,12 +104,11 @@ type Querier struct {
 
 	ArriveAppointmentFunc func(ctx context.Context, id int64) (db.Appointment, error)
 
-	NIHReportByCategoryFunc func(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error)
-	NIHReportTotalsFunc     func(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error)
-	HRCReportByProtocolFunc func(ctx context.Context, arg db.HRCReportByProtocolParams) ([]db.HRCReportByProtocolRow, error)
-	HRCReportTotalFunc      func(ctx context.Context, arg db.HRCReportTotalParams) (int64, error)
-	DemographicsReportFunc  func(ctx context.Context, arg db.DemographicsReportParams) ([]db.DemographicsReportRow, error)
-	ZipCodesReportFunc      func(ctx context.Context, arg db.ZipCodesReportParams) ([]db.ZipCodesReportRow, error)
+	NIHParticipantReportFunc func(ctx context.Context, arg db.NIHParticipantReportParams) ([]db.NIHParticipantReportRow, error)
+	HRCReportByProtocolFunc  func(ctx context.Context, arg db.HRCReportByProtocolParams) ([]db.HRCReportByProtocolRow, error)
+	HRCReportTotalFunc       func(ctx context.Context, arg db.HRCReportTotalParams) (int64, error)
+	DemographicsReportFunc   func(ctx context.Context, arg db.DemographicsReportParams) ([]db.DemographicsReportRow, error)
+	ZipCodesReportFunc       func(ctx context.Context, arg db.ZipCodesReportParams) ([]db.ZipCodesReportRow, error)
 
 	GetJobLastRunFunc                       func(ctx context.Context, jobName string) (pgtype.Timestamptz, error)
 	UpsertJobLastRunFunc                    func(ctx context.Context, jobName string) error
@@ -715,18 +714,11 @@ func (q *Querier) ArriveAppointment(ctx context.Context, id int64) (db.Appointme
 	return q.ArriveAppointmentFunc(ctx, id)
 }
 
-func (q *Querier) NIHReportByCategory(ctx context.Context, arg db.NIHReportByCategoryParams) ([]db.NIHReportByCategoryRow, error) {
-	if q.NIHReportByCategoryFunc == nil {
-		panic("dbfake: NIHReportByCategory not implemented")
+func (q *Querier) NIHParticipantReport(ctx context.Context, arg db.NIHParticipantReportParams) ([]db.NIHParticipantReportRow, error) {
+	if q.NIHParticipantReportFunc == nil {
+		panic("dbfake: NIHParticipantReport not implemented")
 	}
-	return q.NIHReportByCategoryFunc(ctx, arg)
-}
-
-func (q *Querier) NIHReportTotals(ctx context.Context, arg db.NIHReportTotalsParams) (db.NIHReportTotalsRow, error) {
-	if q.NIHReportTotalsFunc == nil {
-		panic("dbfake: NIHReportTotals not implemented")
-	}
-	return q.NIHReportTotalsFunc(ctx, arg)
+	return q.NIHParticipantReportFunc(ctx, arg)
 }
 
 func (q *Querier) HRCReportByProtocol(ctx context.Context, arg db.HRCReportByProtocolParams) ([]db.HRCReportByProtocolRow, error) {

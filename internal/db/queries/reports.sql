@@ -1,45 +1,30 @@
--- name: NIHReportByCategory :many
--- Per-race_ethnicity-category enrollment counts, cross-tabbed by sex, over
--- 'arrived' appointments in a date range -- the current-shape NIH PHS
--- Inclusion Enrollment Report (built against the merged race_ethnicity[]
--- column, not legacy's old separate ethnicity/race/other_race split). A
--- child selecting more than one category is counted in each -- this is
--- per-category, not mutually exclusive, so rows don't sum to the total
--- (see NIHReportTotals for that).
-select
-    category,
-    count(distinct children.id) filter (where children.sex = 'male') as male,
-    count(distinct children.id) filter (where children.sex = 'female') as female,
-    count(distinct children.id) filter (where children.sex = 'unknown') as unknown
+-- name: NIHParticipantReport :many
+-- One row per distinct child with an 'arrived' appointment in range --
+-- the current-shape NIH participant-level data template, which must be
+-- submitted as a flat CSV (one row per participant) rather than the
+-- old aggregate category/sex crosstab. Race/ethnicity/sex label
+-- mapping and age-unit computation happen in Go (see nih_report.go),
+-- not here, so a null birth_date can be handled explicitly rather than
+-- relying on sqlc's nullability inference over a computed expression.
+-- When a child has more than one qualifying appointment in the window,
+-- the earliest one is used for age-at-visit (distinct on + order by
+-- schedule_date), matching the distinct-child counting the old
+-- aggregate queries already used.
+select distinct on (children.id)
+    children.id as child_id,
+    children.sex,
+    children.race_ethnicity,
+    children.birth_date,
+    appointments.schedule_date
 from children
 join appointments on appointments.child_id = children.id
 join experiments on experiments.id = appointments.experiment_id
 left join experiment_grants on experiment_grants.experiment_id = experiments.id
-cross join lateral (select unnest(children.race_ethnicity)::text as category) as u
 where experiments.lab_id = sqlc.arg(lab_id)
   and appointments.status = 'arrived'
   and appointments.schedule_date between sqlc.arg(start_date) and sqlc.arg(end_date)
   and (sqlc.narg(grant_id)::bigint is null or experiment_grants.grant_id = sqlc.narg(grant_id))
-group by category
-order by category;
-
--- name: NIHReportTotals :one
--- Distinct-child totals by sex, same filters as NIHReportByCategory --
--- a naive sum of the per-category rows would double-count a child who
--- selected more than one race_ethnicity category, so this is computed
--- separately rather than derived from the category rows.
-select
-    count(distinct children.id) filter (where children.sex = 'male') as male,
-    count(distinct children.id) filter (where children.sex = 'female') as female,
-    count(distinct children.id) filter (where children.sex = 'unknown') as unknown
-from children
-join appointments on appointments.child_id = children.id
-join experiments on experiments.id = appointments.experiment_id
-left join experiment_grants on experiment_grants.experiment_id = experiments.id
-where experiments.lab_id = sqlc.arg(lab_id)
-  and appointments.status = 'arrived'
-  and appointments.schedule_date between sqlc.arg(start_date) and sqlc.arg(end_date)
-  and (sqlc.narg(grant_id)::bigint is null or experiment_grants.grant_id = sqlc.narg(grant_id));
+order by children.id, appointments.schedule_date;
 
 -- name: HRCReportByProtocol :many
 -- Distinct-child 'arrived' counts per protocol in a date range, for the

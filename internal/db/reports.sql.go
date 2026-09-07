@@ -159,48 +159,52 @@ func (q *Queries) HRCReportTotal(ctx context.Context, arg HRCReportTotalParams) 
 	return child_count, err
 }
 
-const nIHReportByCategory = `-- name: NIHReportByCategory :many
-select
-    category,
-    count(distinct children.id) filter (where children.sex = 'male') as male,
-    count(distinct children.id) filter (where children.sex = 'female') as female,
-    count(distinct children.id) filter (where children.sex = 'unknown') as unknown
+const nIHParticipantReport = `-- name: NIHParticipantReport :many
+select distinct on (children.id)
+    children.id as child_id,
+    children.sex,
+    children.race_ethnicity,
+    children.birth_date,
+    appointments.schedule_date
 from children
 join appointments on appointments.child_id = children.id
 join experiments on experiments.id = appointments.experiment_id
 left join experiment_grants on experiment_grants.experiment_id = experiments.id
-cross join lateral (select unnest(children.race_ethnicity)::text as category) as u
 where experiments.lab_id = $1
   and appointments.status = 'arrived'
   and appointments.schedule_date between $2 and $3
   and ($4::bigint is null or experiment_grants.grant_id = $4)
-group by category
-order by category
+order by children.id, appointments.schedule_date
 `
 
-type NIHReportByCategoryParams struct {
+type NIHParticipantReportParams struct {
 	LabID     int64       `json:"lab_id"`
 	StartDate pgtype.Date `json:"start_date"`
 	EndDate   pgtype.Date `json:"end_date"`
 	GrantID   *int64      `json:"grant_id"`
 }
 
-type NIHReportByCategoryRow struct {
-	Category string `json:"category"`
-	Male     int64  `json:"male"`
-	Female   int64  `json:"female"`
-	Unknown  int64  `json:"unknown"`
+type NIHParticipantReportRow struct {
+	ChildID       int64       `json:"child_id"`
+	Sex           string      `json:"sex"`
+	RaceEthnicity []string    `json:"race_ethnicity"`
+	BirthDate     pgtype.Date `json:"birth_date"`
+	ScheduleDate  pgtype.Date `json:"schedule_date"`
 }
 
-// Per-race_ethnicity-category enrollment counts, cross-tabbed by sex, over
-// 'arrived' appointments in a date range -- the current-shape NIH PHS
-// Inclusion Enrollment Report (built against the merged race_ethnicity[]
-// column, not legacy's old separate ethnicity/race/other_race split). A
-// child selecting more than one category is counted in each -- this is
-// per-category, not mutually exclusive, so rows don't sum to the total
-// (see NIHReportTotals for that).
-func (q *Queries) NIHReportByCategory(ctx context.Context, arg NIHReportByCategoryParams) ([]NIHReportByCategoryRow, error) {
-	rows, err := q.db.Query(ctx, nIHReportByCategory,
+// One row per distinct child with an 'arrived' appointment in range --
+// the current-shape NIH participant-level data template, which must be
+// submitted as a flat CSV (one row per participant) rather than the
+// old aggregate category/sex crosstab. Race/ethnicity/sex label
+// mapping and age-unit computation happen in Go (see nih_report.go),
+// not here, so a null birth_date can be handled explicitly rather than
+// relying on sqlc's nullability inference over a computed expression.
+// When a child has more than one qualifying appointment in the window,
+// the earliest one is used for age-at-visit (distinct on + order by
+// schedule_date), matching the distinct-child counting the old
+// aggregate queries already used.
+func (q *Queries) NIHParticipantReport(ctx context.Context, arg NIHParticipantReportParams) ([]NIHParticipantReportRow, error) {
+	rows, err := q.db.Query(ctx, nIHParticipantReport,
 		arg.LabID,
 		arg.StartDate,
 		arg.EndDate,
@@ -210,14 +214,15 @@ func (q *Queries) NIHReportByCategory(ctx context.Context, arg NIHReportByCatego
 		return nil, err
 	}
 	defer rows.Close()
-	var items []NIHReportByCategoryRow
+	var items []NIHParticipantReportRow
 	for rows.Next() {
-		var i NIHReportByCategoryRow
+		var i NIHParticipantReportRow
 		if err := rows.Scan(
-			&i.Category,
-			&i.Male,
-			&i.Female,
-			&i.Unknown,
+			&i.ChildID,
+			&i.Sex,
+			&i.RaceEthnicity,
+			&i.BirthDate,
+			&i.ScheduleDate,
 		); err != nil {
 			return nil, err
 		}
@@ -227,50 +232,6 @@ func (q *Queries) NIHReportByCategory(ctx context.Context, arg NIHReportByCatego
 		return nil, err
 	}
 	return items, nil
-}
-
-const nIHReportTotals = `-- name: NIHReportTotals :one
-select
-    count(distinct children.id) filter (where children.sex = 'male') as male,
-    count(distinct children.id) filter (where children.sex = 'female') as female,
-    count(distinct children.id) filter (where children.sex = 'unknown') as unknown
-from children
-join appointments on appointments.child_id = children.id
-join experiments on experiments.id = appointments.experiment_id
-left join experiment_grants on experiment_grants.experiment_id = experiments.id
-where experiments.lab_id = $1
-  and appointments.status = 'arrived'
-  and appointments.schedule_date between $2 and $3
-  and ($4::bigint is null or experiment_grants.grant_id = $4)
-`
-
-type NIHReportTotalsParams struct {
-	LabID     int64       `json:"lab_id"`
-	StartDate pgtype.Date `json:"start_date"`
-	EndDate   pgtype.Date `json:"end_date"`
-	GrantID   *int64      `json:"grant_id"`
-}
-
-type NIHReportTotalsRow struct {
-	Male    int64 `json:"male"`
-	Female  int64 `json:"female"`
-	Unknown int64 `json:"unknown"`
-}
-
-// Distinct-child totals by sex, same filters as NIHReportByCategory --
-// a naive sum of the per-category rows would double-count a child who
-// selected more than one race_ethnicity category, so this is computed
-// separately rather than derived from the category rows.
-func (q *Queries) NIHReportTotals(ctx context.Context, arg NIHReportTotalsParams) (NIHReportTotalsRow, error) {
-	row := q.db.QueryRow(ctx, nIHReportTotals,
-		arg.LabID,
-		arg.StartDate,
-		arg.EndDate,
-		arg.GrantID,
-	)
-	var i NIHReportTotalsRow
-	err := row.Scan(&i.Male, &i.Female, &i.Unknown)
-	return i, err
 }
 
 const zipCodesReport = `-- name: ZipCodesReport :many

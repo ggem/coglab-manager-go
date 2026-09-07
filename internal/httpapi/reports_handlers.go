@@ -1,28 +1,19 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/csv"
 	"math"
 	"net/http"
 
 	"github.com/ggem/coglab-manager-go/internal/db"
 )
 
-type nihReportCategoryRow struct {
-	Category string `json:"category"`
-	Male     int64  `json:"male"`
-	Female   int64  `json:"female"`
-	Unknown  int64  `json:"unknown"`
-}
-
-type nihReportResponse struct {
-	Categories []nihReportCategoryRow `json:"categories"`
-	// Totals is distinct-child counts by sex -- not a sum of Categories,
-	// since a child selecting more than one race_ethnicity category is
-	// counted in each of that category's rows.
-	Totals nihReportCategoryRow `json:"totals"`
-}
-
-func (s *Server) handleNIHReport(w http.ResponseWriter, r *http.Request) {
+// handleExportNIHReport produces the current-shape NIH participant-level
+// data template: one row per participant, columns Race,Ethnicity,Sex,Age,
+// Age Unit using its fixed vocabulary -- this can no longer be typed from
+// an on-screen aggregate table (see nih_report.go for the label mapping).
+func (s *Server) handleExportNIHReport(w http.ResponseWriter, r *http.Request) {
 	labID, ok := idParam(w, r, "labID")
 	if !ok {
 		return
@@ -36,14 +27,7 @@ func (s *Server) handleNIHReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	byCategory, err := s.queries.NIHReportByCategory(r.Context(), db.NIHReportByCategoryParams{
-		LabID: labID, StartDate: start, EndDate: end, GrantID: grantID,
-	})
-	if err != nil {
-		s.writeDBError(w, err)
-		return
-	}
-	totals, err := s.queries.NIHReportTotals(r.Context(), db.NIHReportTotalsParams{
+	rows, err := s.queries.NIHParticipantReport(r.Context(), db.NIHParticipantReportParams{
 		LabID: labID, StartDate: start, EndDate: end, GrantID: grantID,
 	})
 	if err != nil {
@@ -51,14 +35,40 @@ func (s *Server) handleNIHReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := nihReportResponse{
-		Categories: make([]nihReportCategoryRow, len(byCategory)),
-		Totals:     nihReportCategoryRow{Male: totals.Male, Female: totals.Female, Unknown: totals.Unknown},
+	// Buffered rather than streamed directly to w -- see
+	// handleExportNewsletter for why.
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write([]string{"Race", "Ethnicity", "Sex", "Age", "Age Unit"}); err != nil {
+		s.logger.Error("encode nih report header", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
 	}
-	for i, c := range byCategory {
-		resp.Categories[i] = nihReportCategoryRow{Category: c.Category, Male: c.Male, Female: c.Female, Unknown: c.Unknown}
+	for _, row := range rows {
+		age, ageUnit := nihAge(row.BirthDate, row.ScheduleDate)
+		record := []string{
+			nihRaceLabel(row.RaceEthnicity),
+			nihEthnicityLabel(row.RaceEthnicity),
+			nihSexLabel(row.Sex),
+			age,
+			ageUnit,
+		}
+		if err := writer.Write(record); err != nil {
+			s.logger.Error("encode nih report row", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		s.logger.Error("flush nih report csv", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=nih-report.csv")
+	w.Write(buf.Bytes())
 }
 
 type hrcReportProtocolRow struct {
