@@ -239,6 +239,7 @@ func (s *Server) Routes() http.Handler {
 		r.Route("/newsletters/{newsletterID}", func(r chi.Router) {
 			r.Use(s.requireLabMemberForNewsletter)
 			r.Get("/", s.handleGetNewsletter)
+			r.Put("/", s.handleUpdateNewsletter)
 			r.Post("/deactivate", s.handleDeactivateNewsletter)
 			r.Post("/mark-sent", s.handleMarkNewsletterSent)
 		})

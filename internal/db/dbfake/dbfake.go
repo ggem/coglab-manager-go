@@ -97,6 +97,7 @@ type Querier struct {
 	CreateNewsletterFunc                  func(ctx context.Context, arg db.CreateNewsletterParams) (db.Newsletter, error)
 	GetNewsletterByIDFunc                 func(ctx context.Context, id int64) (db.Newsletter, error)
 	ListNewslettersByLabFunc              func(ctx context.Context, labID int64) ([]db.Newsletter, error)
+	UpdateNewsletterFunc                  func(ctx context.Context, arg db.UpdateNewsletterParams) (db.Newsletter, error)
 	DeactivateNewsletterFunc              func(ctx context.Context, id int64) error
 	ListEligibleFamiliesForNewsletterFunc func(ctx context.Context, arg db.ListEligibleFamiliesForNewsletterParams) ([]db.ListEligibleFamiliesForNewsletterRow, error)
 	MarkNewsletterSentFunc                func(ctx context.Context, arg db.MarkNewsletterSentParams) error
@@ -677,6 +678,13 @@ func (q *Querier) ListNewslettersByLab(ctx context.Context, labID int64) ([]db.N
 		panic("dbfake: ListNewslettersByLab not implemented")
 	}
 	return q.ListNewslettersByLabFunc(ctx, labID)
+}
+
+func (q *Querier) UpdateNewsletter(ctx context.Context, arg db.UpdateNewsletterParams) (db.Newsletter, error) {
+	if q.UpdateNewsletterFunc == nil {
+		panic("dbfake: UpdateNewsletter not implemented")
+	}
+	return q.UpdateNewsletterFunc(ctx, arg)
 }
 
 func (q *Querier) DeactivateNewsletter(ctx context.Context, id int64) error {

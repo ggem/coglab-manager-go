@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import ExperimentForm from './ExperimentForm'
 import AttachList from './AttachList'
 import AppointmentsPanel from './AppointmentsPanel'
+import DemographicsReport from './DemographicsReport'
 import {
   addExperimentCondition,
   addExperimentEquipment,
@@ -154,6 +155,8 @@ export default function ExperimentDetail() {
       />
 
       <AppointmentsPanel experimentId={id} labId={labId} />
+
+      <DemographicsReport experimentId={id} />
     </div>
   )
 }

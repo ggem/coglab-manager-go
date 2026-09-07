@@ -8,6 +8,10 @@ select * from newsletters where id = sqlc.arg(id);
 -- name: ListNewslettersByLab :many
 select * from newsletters where lab_id = sqlc.arg(lab_id) order by name;
 
+-- name: UpdateNewsletter :one
+update newsletters set name = sqlc.arg(name) where id = sqlc.arg(id)
+returning *;
+
 -- name: DeactivateNewsletter :exec
 update newsletters set deactivated_at = now() where id = sqlc.arg(id);
 

@@ -133,6 +133,50 @@ func TestHandleListNewslettersByLab_Success(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateNewsletter_Success(t *testing.T) {
+	var captured db.UpdateNewsletterParams
+	q := &dbfake.Querier{
+		GetNewsletterByIDFunc: func(ctx context.Context, id int64) (db.Newsletter, error) {
+			return db.Newsletter{ID: id, LabID: 1}, nil
+		},
+		UpdateNewsletterFunc: func(ctx context.Context, arg db.UpdateNewsletterParams) (db.Newsletter, error) {
+			captured = arg
+			return db.Newsletter{ID: arg.ID, LabID: 1, Name: arg.Name}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPut, "/newsletters/3/", cookie, newsletterRequest{Name: "Renamed"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if captured.ID != 3 || captured.Name != "Renamed" {
+		t.Errorf("UpdateNewsletter params = %+v", captured)
+	}
+}
+
+func TestHandleUpdateNewsletter_NotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		GetNewsletterByIDFunc: func(ctx context.Context, id int64) (db.Newsletter, error) {
+			return db.Newsletter{ID: id, LabID: 1}, nil
+		},
+		UpdateNewsletterFunc: func(ctx context.Context, arg db.UpdateNewsletterParams) (db.Newsletter, error) {
+			return db.Newsletter{}, pgx.ErrNoRows
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPut, "/newsletters/404/", cookie, newsletterRequest{Name: "X"})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
 func TestHandleDeactivateNewsletter_InvalidID(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
 

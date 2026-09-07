@@ -193,3 +193,27 @@ func (q *Queries) MarkNewsletterSent(ctx context.Context, arg MarkNewsletterSent
 	_, err := q.db.Exec(ctx, markNewsletterSent, arg.NewsletterID, arg.GuardianID)
 	return err
 }
+
+const updateNewsletter = `-- name: UpdateNewsletter :one
+update newsletters set name = $1 where id = $2
+returning id, lab_id, name, deactivated_at, created_at, updated_at
+`
+
+type UpdateNewsletterParams struct {
+	Name string `json:"name"`
+	ID   int64  `json:"id"`
+}
+
+func (q *Queries) UpdateNewsletter(ctx context.Context, arg UpdateNewsletterParams) (Newsletter, error) {
+	row := q.db.QueryRow(ctx, updateNewsletter, arg.Name, arg.ID)
+	var i Newsletter
+	err := row.Scan(
+		&i.ID,
+		&i.LabID,
+		&i.Name,
+		&i.DeactivatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

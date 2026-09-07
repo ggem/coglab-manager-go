@@ -64,6 +64,12 @@ export default function Layout({ user }: Props) {
           >
             Availability
           </NavLink>
+          <NavLink
+            to="/app/reports"
+            className={() => (location.pathname.includes('/reports') ? 'active' : '')}
+          >
+            Reports
+          </NavLink>
         </nav>
         <div className="header-user">
           {labId && labs && labs.length > 1 && (

@@ -307,6 +307,7 @@ type Querier interface {
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
 	UpdateGrant(ctx context.Context, arg UpdateGrantParams) (Grant, error)
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
+	UpdateNewsletter(ctx context.Context, arg UpdateNewsletterParams) (Newsletter, error)
 	UpdateProtocol(ctx context.Context, arg UpdateProtocolParams) (Protocol, error)
 	UpdateZipCode(ctx context.Context, arg UpdateZipCodeParams) (Zipcode, error)
 	// last_run_at is always Postgres's own now(), not a caller-supplied

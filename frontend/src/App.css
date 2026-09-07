@@ -595,3 +595,35 @@ td {
   color: white;
   flex-shrink: 0;
 }
+
+/* Reports page: shared filter-row shape across all four tabs (NIH,
+   HRC, Zip Codes, Newsletters), matching .hold-children-form's layout. */
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin: 1rem 0;
+}
+
+.report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.report-filters input,
+.report-filters select {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+  min-width: 0;
+}
+
+.report-filters button,
+.report-filters a.add-family {
+  height: fit-content;
+}

@@ -855,3 +855,136 @@ export function listAppointmentNotes(appointmentId: number): Promise<Note[]> {
 export function createAppointmentNote(appointmentId: number, body: string): Promise<Note> {
   return apiFetch<Note>(`/appointments/${appointmentId}/notes/`, { method: 'POST', body: JSON.stringify({ body }) })
 }
+
+// --- Newsletters ---
+
+export interface Newsletter extends LookupRow {
+  name: string
+}
+
+export function listNewsletters(labId: number): Promise<Newsletter[]> {
+  return apiFetch<Newsletter[]>(`/labs/${labId}/newsletters/`)
+}
+export function createNewsletter(labId: number, name: string): Promise<Newsletter> {
+  return apiFetch<Newsletter>(`/labs/${labId}/newsletters/`, { method: 'POST', body: JSON.stringify({ name }) })
+}
+export function updateNewsletter(id: number, name: string): Promise<Newsletter> {
+  return apiFetch<Newsletter>(`/newsletters/${id}/`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+export function deactivateNewsletter(id: number): Promise<void> {
+  return apiFetch<void>(`/newsletters/${id}/deactivate`, { method: 'POST' })
+}
+
+// A plain URL, not a fetch -- the browser's normal same-origin GET
+// (cookies included automatically) triggers a download on its own via
+// the backend's Content-Disposition: attachment, so an <a href={...}>
+// is all that's needed; no blob/JS download machinery.
+export function exportNewsletterUrl(
+  labId: number,
+  startDate: string,
+  endDate: string,
+  newsletterId: number | null,
+): string {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  if (newsletterId !== null) params.set('newsletter_id', String(newsletterId))
+  return `/labs/${labId}/newsletters/export?${params.toString()}`
+}
+
+export function markNewsletterSent(
+  newsletterId: number,
+  startDate: string,
+  endDate: string,
+): Promise<{ marked_sent: number }> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  return apiFetch<{ marked_sent: number }>(`/newsletters/${newsletterId}/mark-sent?${params.toString()}`, {
+    method: 'POST',
+  })
+}
+
+// --- Reports ---
+
+export interface NIHReportCategory {
+  category: string
+  male: number
+  female: number
+  unknown: number
+}
+
+export interface NIHReport {
+  categories: NIHReportCategory[]
+  totals: NIHReportCategory
+}
+
+export function getNIHReport(
+  labId: number,
+  startDate: string,
+  endDate: string,
+  grantId: number | null,
+): Promise<NIHReport> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  if (grantId !== null) params.set('grant_id', String(grantId))
+  return apiFetch<NIHReport>(`/labs/${labId}/reports/nih?${params.toString()}`)
+}
+
+export interface HRCReportProtocol {
+  protocol_id: number | null
+  protocol_name: string
+  child_count: number
+}
+
+export interface HRCReport {
+  protocols: HRCReportProtocol[]
+  total: number
+}
+
+export function getHRCReport(labId: number, startDate: string, endDate: string): Promise<HRCReport> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  return apiFetch<HRCReport>(`/labs/${labId}/reports/hrc?${params.toString()}`)
+}
+
+export interface ZipCodesReportRow {
+  zip: string
+  priority: string | null
+  child_count: number
+}
+
+export function getZipCodesReport(labId: number, recruitmentSourceId: number | null): Promise<ZipCodesReportRow[]> {
+  const params = new URLSearchParams()
+  if (recruitmentSourceId !== null) params.set('recruitment_source_id', String(recruitmentSourceId))
+  return apiFetch<ZipCodesReportRow[]>(`/labs/${labId}/reports/zip-codes?${params.toString()}`)
+}
+
+export interface DemographicsReportChild {
+  child_id: number
+  first_name: string
+  last_name: string
+  sex: string
+  race_ethnicity: string[]
+  schedule_date: string
+  age_months: number
+  guardian_education: string
+}
+
+export interface DemographicsReportSummary {
+  count: number
+  by_sex: Record<string, number>
+  by_race_ethnicity: Record<string, number>
+  by_guardian_education: Record<string, number>
+  age_months_avg: number
+  age_months_min: number
+  age_months_max: number
+}
+
+export interface DemographicsReport {
+  children: DemographicsReportChild[]
+  summary: DemographicsReportSummary
+}
+
+export function getDemographicsReport(
+  experimentId: number,
+  startDate: string,
+  endDate: string,
+): Promise<DemographicsReport> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  return apiFetch<DemographicsReport>(`/experiments/${experimentId}/reports/demographics?${params.toString()}`)
+}

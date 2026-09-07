@@ -12,6 +12,7 @@ import (
 
 const (
 	ActionNewsletterCreated     = "newsletter.created"
+	ActionNewsletterUpdated     = "newsletter.updated"
 	ActionNewsletterDeactivated = "newsletter.deactivated"
 	ActionNewsletterMarkedSent  = "newsletter.marked_sent"
 )
@@ -104,6 +105,38 @@ func (s *Server) handleListNewslettersByLab(w http.ResponseWriter, r *http.Reque
 		resp[i] = newsletterToResponse(n)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleUpdateNewsletter(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r, "newsletterID")
+	if !ok {
+		return
+	}
+
+	var req newsletterRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	newsletter, err := s.queries.UpdateNewsletter(r.Context(), db.UpdateNewsletterParams{
+		ID:   id,
+		Name: req.Name,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		LabID:       &newsletter.LabID,
+		Action:      ActionNewsletterUpdated,
+		EntityType:  ptr("newsletter"),
+		EntityID:    &newsletter.ID,
+	})
+
+	writeJSON(w, http.StatusOK, newsletterToResponse(newsletter))
 }
 
 func (s *Server) handleDeactivateNewsletter(w http.ResponseWriter, r *http.Request) {

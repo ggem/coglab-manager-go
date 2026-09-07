@@ -11,6 +11,7 @@ import Experiments from './Experiments'
 import CreateExperiment from './CreateExperiment'
 import ExperimentDetail from './ExperimentDetail'
 import Availability from './Availability'
+import Reports from './Reports'
 import { getMe, type User } from './api'
 import './App.css'
 
@@ -55,6 +56,8 @@ function App() {
         <Route path="experiments/:experimentId" element={<ExperimentDetail />} />
         <Route path="availability" element={<LabPicker buildPath={(id) => `/app/labs/${id}/availability`} />} />
         <Route path="labs/:labId/availability" element={<Availability />} />
+        <Route path="reports" element={<LabPicker buildPath={(id) => `/app/labs/${id}/reports`} />} />
+        <Route path="labs/:labId/reports" element={<Reports />} />
         <Route path="families" element={<Navigate to="/app/participants" replace />} />
         <Route path="families/new" element={<CreateFamily />} />
         <Route path="families/:familyId" element={<FamilyDetail />} />
