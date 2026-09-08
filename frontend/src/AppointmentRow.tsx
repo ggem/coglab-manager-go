@@ -13,11 +13,28 @@ import {
   releaseAppointment,
   type Appointment,
 } from './api'
+import { SEX_LABELS } from './participantOptions'
 
 interface Props {
   appointment: Appointment
   experimentId: number
   labId: number
+}
+
+// Covers every status the column can hold, not just the 4 the live
+// scheduling workflow can currently produce (AppointmentsPanel.tsx's
+// own STATUS_TABS is deliberately limited to those 4, since there's no
+// live action that transitions an appointment to no_show/canceled/
+// problem yet) -- imported legacy history can and does contain the
+// other three (see the M10 legacy import).
+const STATUS_LABELS: Record<string, string> = {
+  to_be_scheduled: 'To be scheduled',
+  pending: 'Pending',
+  released: 'Released',
+  arrived: 'Arrived',
+  no_show: 'No show',
+  canceled: 'Canceled',
+  problem: 'Problem',
 }
 
 export default function AppointmentRow({ appointment, experimentId, labId }: Props) {
@@ -91,7 +108,7 @@ export default function AppointmentRow({ appointment, experimentId, labId }: Pro
           </button>
         </td>
         <td>{child ? `${child.first_name} ${child.last_name}` : '…'}</td>
-        <td>{appointment.status}</td>
+        <td>{STATUS_LABELS[appointment.status] ?? appointment.status}</td>
         <td>{appointment.schedule_date ?? '—'}</td>
         <td>{appointment.schedule_time_start ?? '—'}</td>
         <td className="lookup-table-actions">
@@ -129,7 +146,8 @@ export default function AppointmentRow({ appointment, experimentId, labId }: Pro
                 <div>
                   <h4>Child</h4>
                   <p>
-                    {child.first_name} {child.last_name} -- {child.sex}, born {child.birth_date ?? 'unknown'}
+                    {child.first_name} {child.last_name} -- {SEX_LABELS[child.sex] ?? child.sex}, born{' '}
+                    {child.birth_date ?? 'unknown'}
                   </p>
                   {child.birth_complications && <p>Birth complications: {child.birth_complications_notes}</p>}
                   {child.twin && <p>Twin</p>}
@@ -159,13 +177,14 @@ export default function AppointmentRow({ appointment, experimentId, labId }: Pro
                   <ul>
                     {history.own.map((h) => (
                       <li key={h.appointment_id}>
-                        {h.experiment_name} ({h.status}
+                        {h.experiment_name} ({STATUS_LABELS[h.status] ?? h.status}
                         {h.schedule_date ? `, ${h.schedule_date}` : ''})
                       </li>
                     ))}
                     {history.siblings.map((h) => (
                       <li key={h.appointment_id}>
-                        {h.child_first_name} {h.child_last_name}: {h.experiment_name} ({h.status}
+                        {h.child_first_name} {h.child_last_name}: {h.experiment_name} (
+                        {STATUS_LABELS[h.status] ?? h.status}
                         {h.schedule_date ? `, ${h.schedule_date}` : ''})
                       </li>
                     ))}

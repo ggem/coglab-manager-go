@@ -32,3 +32,15 @@ export const EDUCATION_OPTIONS = [
   { value: 'degree_from_4yr_college_or_higher', label: '4-year degree or higher' },
   { value: 'left_blank', label: 'Left blank' },
 ]
+
+function labelMap(options: { value: string; label: string }[]): Record<string, string> {
+  return Object.fromEntries(options.map((o) => [o.value, o.label]))
+}
+
+// Precomputed value -> label lookups for plain read-only display (a
+// table cell, a summary line) -- look up with `LABELS[value] ??
+// value` so an unrecognized value still shows something instead of
+// disappearing.
+export const SEX_LABELS = labelMap(SEX_OPTIONS)
+export const RACE_ETHNICITY_LABELS = labelMap(RACE_ETHNICITY_OPTIONS)
+export const EDUCATION_LABELS = labelMap(EDUCATION_OPTIONS)

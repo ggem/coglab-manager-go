@@ -25,7 +25,7 @@ import {
   type GuardianInput,
   type RecruitmentSource,
 } from './api'
-import { EDUCATION_OPTIONS } from './participantOptions'
+import { EDUCATION_OPTIONS, SEX_LABELS } from './participantOptions'
 
 const CONTACT_METHODS = [
   { value: 'home_phone', label: 'Home phone' },
@@ -397,7 +397,7 @@ function ChildrenSection({
                 <td>
                   {c.first_name} {c.last_name}
                 </td>
-                <td>{c.sex}</td>
+                <td>{SEX_LABELS[c.sex] ?? c.sex}</td>
                 <td>{c.birth_date ?? '—'}</td>
                 <td>{c.deactivated ? 'Deactivated' : 'Active'}</td>
                 <td className="lookup-table-actions">

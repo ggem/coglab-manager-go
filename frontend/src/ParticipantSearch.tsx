@@ -7,6 +7,7 @@ import {
   type ChildSearchResult,
   type FamilySearchResult,
 } from './api'
+import { SEX_LABELS } from './participantOptions'
 
 type Tab = 'children' | 'families'
 
@@ -98,7 +99,7 @@ export default function ParticipantSearch() {
                     {c.first_name} {c.last_name}
                   </Link>
                 </td>
-                <td>{c.sex}</td>
+                <td>{SEX_LABELS[c.sex] ?? c.sex}</td>
                 <td>{c.birth_date ?? '—'}</td>
                 <td>{c.family_id}</td>
               </tr>

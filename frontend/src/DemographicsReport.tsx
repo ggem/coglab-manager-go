@@ -1,17 +1,7 @@
 import { useState, type SubmitEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { errorMessage, getDemographicsReport } from './api'
-import { EDUCATION_OPTIONS, RACE_ETHNICITY_OPTIONS, SEX_OPTIONS } from './participantOptions'
-
-// Reuses the same option lists ChildForm/FamilyDetail edit against, so
-// this report shows the same labels as the rest of the app instead of
-// raw stored values (e.g. "hispanic_or_latino", "degree_from_4yr_college_or_higher").
-function labelMap(options: { value: string; label: string }[]): Record<string, string> {
-  return Object.fromEntries(options.map((o) => [o.value, o.label]))
-}
-const SEX_LABELS = labelMap(SEX_OPTIONS)
-const RACE_ETHNICITY_LABELS = labelMap(RACE_ETHNICITY_OPTIONS)
-const EDUCATION_LABELS = labelMap(EDUCATION_OPTIONS)
+import { EDUCATION_LABELS, RACE_ETHNICITY_LABELS, SEX_LABELS } from './participantOptions'
 
 export default function DemographicsReport({ experimentId }: { experimentId: number }) {
   const [startDate, setStartDate] = useState('')
