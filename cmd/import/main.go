@@ -11,9 +11,12 @@
 // transaction (so Postgres's own constraints -- FKs, enums, uniqueness
 // -- do the actual validation, not a hand-rolled approximation of them)
 // and then rolled back, never committed, with a report of what would
-// have happened. Pass -dry-run=false to commit for real; the importer
-// refuses to do so if the report contains any errors, so a partially-
-// bad table can't silently import short.
+// have happened. Review that report before passing -dry-run=false to
+// commit for real: a real run commits everything that succeeded even
+// if some rows were skipped (each is isolated to its own savepoint, so
+// a handful of known bad rows can't cost every other successfully-
+// imported row) -- the report lists exactly which rows were skipped
+// and why, for a manual follow-up pass on the legacy side if needed.
 package main
 
 import (
@@ -91,13 +94,16 @@ func run() error {
 	report.Write(out)
 
 	if *dryRun {
-		fmt.Println("\ndry run: nothing was committed. Re-run with -dry-run=false once this report is clean.")
+		fmt.Println("\ndry run: nothing was committed. Re-run with -dry-run=false when ready to import for real.")
 		return nil
 	}
 	if report.HasErrors() {
-		return fmt.Errorf("import had errors -- see the report; nothing after the first failing table's transaction was committed")
+		fmt.Println("\nimport complete, with some rows skipped -- see the report above for which ones and why. " +
+			"Each skip is isolated to its own row (or, for appointment_experimenters, its own appointment+member " +
+			"pair); nothing else was affected.")
+		return nil
 	}
-	fmt.Println("\nimport complete.")
+	fmt.Println("\nimport complete: every row imported cleanly.")
 	return nil
 }
 
@@ -119,6 +125,16 @@ func run() error {
 // steps -- but a step-level error (a query against the legacy database
 // failing, a sequence bump failing, ...) is a real infrastructure
 // problem, not a bad row, and does abort the whole run.
+//
+// A real (-dry-run=false) run commits even when report has row-level
+// errors: each one is already isolated to its own savepoint (or, for
+// appointment_experimenters, its own resolved appointment+member
+// group), so a handful of known, reviewable bad rows -- an orphaned
+// foreign key, a backwards time range, a duplicate email -- shouldn't
+// cost every other successfully-imported row. Only a step-level error
+// (returned from runImportSteps, not collected in report) rolls back
+// the whole run, since that's a real infrastructure problem rather
+// than something the report already accounts for.
 func runImport(ctx context.Context, legacyDB *sql.DB, pool *pgxpool.Pool, report *Report, importedAt time.Time, dryRun bool) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -128,7 +144,7 @@ func runImport(ctx context.Context, legacyDB *sql.DB, pool *pgxpool.Pool, report
 		tx.Rollback(ctx)
 		return err
 	}
-	if dryRun || report.HasErrors() {
+	if dryRun {
 		return tx.Rollback(ctx)
 	}
 	return tx.Commit(ctx)
