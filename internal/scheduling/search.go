@@ -56,12 +56,21 @@ type CandidateSlot struct {
 // find which slots are worth trying at all, then runs the exact
 // backtracking search (FindAssignment) only on those.  See the package
 // doc for why both phases exist.
+//
+// dedicatedGreeterRoleID, when non-nil, names a role in roles whose
+// assignee should be reported as the slot's GreeterID directly (an
+// appointment that has requested a dedicated greeter) instead of the
+// default DesignateGreeter guess. The role itself is required exactly
+// like any other entry in roles -- the caller is responsible for
+// including its candidates there; this parameter only changes how
+// GreeterID is read off the resulting assignment.
 func SearchAvailability(
 	days []DayAvailability,
 	roles []RoleCandidatesForSearch,
 	sitterRole *RoleCandidatesForSearch,
 	sitterRequirement SitterRequirement,
 	duration time.Duration,
+	dedicatedGreeterRoleID *int64,
 ) []CandidateSlot {
 	// A sitter is required but there's no sitter role to draw candidates
 	// from at all -- that can never be satisfied, so there's nothing to
@@ -90,7 +99,7 @@ func SearchAvailability(
 			if sitterRole != nil && sitterRequirement != SitterNotNeeded {
 				isAvail := availabilityCheck(sitterLookup, dayIdx, slot, timeSlots)
 				if assignment, ok := FindAssignment(roleCandidates(withSitterRoles), isAvail); ok {
-					results = append(results, toCandidateSlot(day.Date, slot, assignment, true))
+					results = append(results, toCandidateSlot(day.Date, slot, assignment, true, dedicatedGreeterRoleID))
 					continue
 				}
 				if sitterRequirement == SitterRequired {
@@ -100,7 +109,7 @@ func SearchAvailability(
 
 			isAvail := availabilityCheck(plainLookup, dayIdx, slot, timeSlots)
 			if assignment, ok := FindAssignment(roleCandidates(plainRoles), isAvail); ok {
-				results = append(results, toCandidateSlot(day.Date, slot, assignment, false))
+				results = append(results, toCandidateSlot(day.Date, slot, assignment, false, dedicatedGreeterRoleID))
 			}
 		}
 	}
@@ -177,8 +186,13 @@ func availabilityCheck(lookup map[int64]map[int64][]Slots, dayIdx, slot, timeSlo
 	}
 }
 
-func toCandidateSlot(date time.Time, slot int, assignment Assignment, hasSitter bool) CandidateSlot {
-	greeter, _ := DesignateGreeter(assignment)
+func toCandidateSlot(date time.Time, slot int, assignment Assignment, hasSitter bool, dedicatedGreeterRoleID *int64) CandidateSlot {
+	var greeter int64
+	if dedicatedGreeterRoleID != nil {
+		greeter = assignment[*dedicatedGreeterRoleID]
+	} else {
+		greeter, _ = DesignateGreeter(assignment)
+	}
 	return CandidateSlot{
 		Date:       date,
 		StartTime:  slotToTime(slot),

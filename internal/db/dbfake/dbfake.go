@@ -146,6 +146,8 @@ type Querier struct {
 	DeactivateExperimentRoleFunc func(ctx context.Context, id int64) error
 	SetExperimentRoleSitterFunc  func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error)
 	GetSitterRoleForLabFunc      func(ctx context.Context, labID int64) (db.ExperimentRole, error)
+	SetExperimentRoleGreeterFunc func(ctx context.Context, arg db.SetExperimentRoleGreeterParams) (db.ExperimentRole, error)
+	GetGreeterRoleForLabFunc     func(ctx context.Context, labID int64) (db.ExperimentRole, error)
 
 	AddLabMemberTrainingFunc                    func(ctx context.Context, arg db.AddLabMemberTrainingParams) error
 	RemoveLabMemberTrainingFunc                 func(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error
@@ -179,6 +181,7 @@ type Querier struct {
 	ListAppointmentsBySiblingsFunc   func(ctx context.Context, childID int64) ([]db.ListAppointmentsBySiblingsRow, error)
 	ScheduleAppointmentFunc          func(ctx context.Context, arg db.ScheduleAppointmentParams) (db.Appointment, error)
 	ReleaseAppointmentFunc           func(ctx context.Context, id int64) (db.Appointment, error)
+	SetAppointmentWantsGreeterFunc   func(ctx context.Context, arg db.SetAppointmentWantsGreeterParams) (db.Appointment, error)
 
 	CreateAppointmentExperimenterFunc                func(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error)
 	ListAppointmentExperimentersFunc                 func(ctx context.Context, appointmentID int64) ([]db.ListAppointmentExperimentersRow, error)
@@ -925,6 +928,20 @@ func (q *Querier) GetSitterRoleForLab(ctx context.Context, labID int64) (db.Expe
 	return q.GetSitterRoleForLabFunc(ctx, labID)
 }
 
+func (q *Querier) SetExperimentRoleGreeter(ctx context.Context, arg db.SetExperimentRoleGreeterParams) (db.ExperimentRole, error) {
+	if q.SetExperimentRoleGreeterFunc == nil {
+		panic("dbfake: SetExperimentRoleGreeter not implemented")
+	}
+	return q.SetExperimentRoleGreeterFunc(ctx, arg)
+}
+
+func (q *Querier) GetGreeterRoleForLab(ctx context.Context, labID int64) (db.ExperimentRole, error) {
+	if q.GetGreeterRoleForLabFunc == nil {
+		panic("dbfake: GetGreeterRoleForLab not implemented")
+	}
+	return q.GetGreeterRoleForLabFunc(ctx, labID)
+}
+
 func (q *Querier) AddLabMemberTraining(ctx context.Context, arg db.AddLabMemberTrainingParams) error {
 	if q.AddLabMemberTrainingFunc == nil {
 		panic("dbfake: AddLabMemberTraining not implemented")
@@ -1119,6 +1136,13 @@ func (q *Querier) ReleaseAppointment(ctx context.Context, id int64) (db.Appointm
 		panic("dbfake: ReleaseAppointment not implemented")
 	}
 	return q.ReleaseAppointmentFunc(ctx, id)
+}
+
+func (q *Querier) SetAppointmentWantsGreeter(ctx context.Context, arg db.SetAppointmentWantsGreeterParams) (db.Appointment, error) {
+	if q.SetAppointmentWantsGreeterFunc == nil {
+		panic("dbfake: SetAppointmentWantsGreeter not implemented")
+	}
+	return q.SetAppointmentWantsGreeterFunc(ctx, arg)
 }
 
 func (q *Querier) CreateAppointmentExperimenter(ctx context.Context, arg db.CreateAppointmentExperimenterParams) (db.AppointmentExperimenter, error) {

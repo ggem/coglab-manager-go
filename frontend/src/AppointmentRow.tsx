@@ -11,6 +11,7 @@ import {
   listAppointmentExperimenters,
   listGuardiansByFamily,
   releaseAppointment,
+  setAppointmentWantsGreeter,
   type Appointment,
 } from './api'
 import { SEX_LABELS } from './participantOptions'
@@ -86,6 +87,14 @@ export default function AppointmentRow({ appointment, experimentId, labId }: Pro
       void invalidate()
     },
     onError: (err) => setActionError(errorMessage(err, 'Failed to mark arrived.')),
+  })
+  const wantsGreeterMutation = useMutation({
+    mutationFn: (wantsDedicatedGreeter: boolean) => setAppointmentWantsGreeter(appointment.id, wantsDedicatedGreeter),
+    onSuccess: () => {
+      setActionError(null)
+      void invalidate()
+    },
+    onError: (err) => setActionError(errorMessage(err, 'Failed to update greeter request.')),
   })
 
   function handleArrive() {
@@ -203,6 +212,17 @@ export default function AppointmentRow({ appointment, experimentId, labId }: Pro
                     ))}
                   </ul>
                 </div>
+              )}
+              {(appointment.status === 'to_be_scheduled' || appointment.status === 'pending') && (
+                <label className="dedicated-greeter-toggle">
+                  <input
+                    type="checkbox"
+                    checked={appointment.wants_dedicated_greeter}
+                    disabled={wantsGreeterMutation.isPending}
+                    onChange={(e) => wantsGreeterMutation.mutate(e.target.checked)}
+                  />
+                  Needs a dedicated greeter
+                </label>
               )}
               <AppointmentCallLog appointmentId={appointment.id} />
               {appointment.status === 'to_be_scheduled' && (

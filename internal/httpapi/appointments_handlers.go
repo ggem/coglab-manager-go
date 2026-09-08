@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	ActionAppointmentCreated   = "appointment.created"
-	ActionAppointmentScheduled = "appointment.scheduled"
-	ActionAppointmentReleased  = "appointment.released"
-	ActionAppointmentArrived   = "appointment.arrived"
+	ActionAppointmentCreated         = "appointment.created"
+	ActionAppointmentScheduled       = "appointment.scheduled"
+	ActionAppointmentReleased        = "appointment.released"
+	ActionAppointmentArrived         = "appointment.arrived"
+	ActionAppointmentWantsGreeterSet = "appointment.wants_greeter_set"
 )
 
 // maxSearchDays caps how many days an availability search covers in one
@@ -31,32 +32,34 @@ type appointmentRequest struct {
 }
 
 type appointmentResponse struct {
-	ID                int64     `json:"id"`
-	ExperimentID      int64     `json:"experiment_id"`
-	ChildID           int64     `json:"child_id"`
-	Session           int16     `json:"session"`
-	AgeRangeMinMonths *float64  `json:"age_range_min_months"`
-	AgeRangeMaxMonths *float64  `json:"age_range_max_months"`
-	SiblingComing     string    `json:"sibling_coming"`
-	ScheduleDate      *string   `json:"schedule_date"`
-	ScheduleTimeStart *string   `json:"schedule_time_start"`
-	ScheduleTimeEnd   *string   `json:"schedule_time_end"`
-	Status            string    `json:"status"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                    int64     `json:"id"`
+	ExperimentID          int64     `json:"experiment_id"`
+	ChildID               int64     `json:"child_id"`
+	Session               int16     `json:"session"`
+	AgeRangeMinMonths     *float64  `json:"age_range_min_months"`
+	AgeRangeMaxMonths     *float64  `json:"age_range_max_months"`
+	SiblingComing         string    `json:"sibling_coming"`
+	WantsDedicatedGreeter bool      `json:"wants_dedicated_greeter"`
+	ScheduleDate          *string   `json:"schedule_date"`
+	ScheduleTimeStart     *string   `json:"schedule_time_start"`
+	ScheduleTimeEnd       *string   `json:"schedule_time_end"`
+	Status                string    `json:"status"`
+	CreatedAt             time.Time `json:"created_at"`
 }
 
 func appointmentToResponse(a db.Appointment) appointmentResponse {
 	resp := appointmentResponse{
-		ID:                a.ID,
-		ExperimentID:      a.ExperimentID,
-		ChildID:           a.ChildID,
-		Session:           a.Session,
-		AgeRangeMinMonths: numericToPtr(a.AgeRangeMinMonths),
-		AgeRangeMaxMonths: numericToPtr(a.AgeRangeMaxMonths),
-		SiblingComing:     a.SiblingComing,
-		ScheduleDate:      dateToPtr(a.ScheduleDate),
-		Status:            a.Status,
-		CreatedAt:         a.CreatedAt.Time,
+		ID:                    a.ID,
+		ExperimentID:          a.ExperimentID,
+		ChildID:               a.ChildID,
+		Session:               a.Session,
+		AgeRangeMinMonths:     numericToPtr(a.AgeRangeMinMonths),
+		AgeRangeMaxMonths:     numericToPtr(a.AgeRangeMaxMonths),
+		SiblingComing:         a.SiblingComing,
+		WantsDedicatedGreeter: a.WantsDedicatedGreeter,
+		ScheduleDate:          dateToPtr(a.ScheduleDate),
+		Status:                a.Status,
+		CreatedAt:             a.CreatedAt.Time,
 	}
 	if a.ScheduleTimeStart.Valid {
 		resp.ScheduleTimeStart = ptr(clockTimeToString(a.ScheduleTimeStart))
@@ -193,6 +196,51 @@ func (s *Server) handleArriveAppointment(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, appointmentToResponse(arrived))
 }
 
+type setAppointmentWantsGreeterRequest struct {
+	WantsDedicatedGreeter bool `json:"wants_dedicated_greeter"`
+}
+
+// handleSetAppointmentWantsGreeter records whether staff want a dedicated
+// greeter for this appointment -- a distinct decision from sibling_coming
+// (there's no "soft" state here: it's either not requested, or requested
+// and required), so it folds straight into buildAvailabilitySearch's
+// normal required-role handling rather than needing sitter's separate
+// optional-with-fallback branching. Persists on the appointment (like
+// sibling_coming), not a per-search-only checkbox, and is only
+// meaningful while the appointment's staff assignment isn't already
+// final (mirrors ReleaseAppointment's to_be_scheduled/pending guard).
+func (s *Server) handleSetAppointmentWantsGreeter(w http.ResponseWriter, r *http.Request) {
+	appointmentID, ok := idParam(w, r, "appointmentID")
+	if !ok {
+		return
+	}
+
+	var req setAppointmentWantsGreeterRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	updated, err := s.queries.SetAppointmentWantsGreeter(r.Context(), db.SetAppointmentWantsGreeterParams{
+		ID:                    appointmentID,
+		WantsDedicatedGreeter: req.WantsDedicatedGreeter,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		Action:      ActionAppointmentWantsGreeterSet,
+		EntityType:  ptr("appointment"),
+		EntityID:    &appointmentID,
+		Metadata:    map[string]bool{"wants_dedicated_greeter": req.WantsDedicatedGreeter},
+	})
+
+	writeJSON(w, http.StatusOK, appointmentToResponse(updated))
+}
+
 type candidateSlotResponse struct {
 	Date       string          `json:"date"`
 	StartTime  string          `json:"start_time"`
@@ -256,7 +304,7 @@ func (s *Server) handleSearchAppointmentAvailability(w http.ResponseWriter, r *h
 
 	results := scheduling.SearchAvailability(
 		search.days, search.roles, search.sitterRole, search.sitterRequirement,
-		time.Duration(experiment.DurationMinutes)*time.Minute,
+		time.Duration(experiment.DurationMinutes)*time.Minute, search.dedicatedGreeterRoleID,
 	)
 
 	resp := make([]candidateSlotResponse, len(results))
@@ -318,7 +366,7 @@ func (s *Server) handleScheduleAppointment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	duration := time.Duration(experiment.DurationMinutes) * time.Minute
-	results := scheduling.SearchAvailability(search.days, search.roles, search.sitterRole, search.sitterRequirement, duration)
+	results := scheduling.SearchAvailability(search.days, search.roles, search.sitterRole, search.sitterRequirement, duration, search.dedicatedGreeterRoleID)
 
 	requestedStart := pgTimeToDuration(startTime)
 	var chosen *scheduling.CandidateSlot

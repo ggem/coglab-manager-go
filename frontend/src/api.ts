@@ -409,6 +409,7 @@ export function deactivateEquipment(id: number): Promise<void> {
 export interface ExperimentRole extends LookupRow {
   name: string
   is_sitter_role: boolean
+  is_greeter_role: boolean
 }
 
 export function listExperimentRoles(labId: number): Promise<ExperimentRole[]> {
@@ -433,6 +434,15 @@ export function setExperimentRoleSitter(id: number, isSitterRole: boolean): Prom
   return apiFetch<ExperimentRole>(`/experiment-roles/${id}/set-sitter`, {
     method: 'POST',
     body: JSON.stringify({ is_sitter_role: isSitterRole }),
+  })
+}
+// A dedicated action, not part of the regular update -- at most one role
+// per lab can be the dedicated-greeter role (enforced server-side), so
+// setting it is a designation, not just editing a field.
+export function setExperimentRoleGreeter(id: number, isGreeterRole: boolean): Promise<ExperimentRole> {
+  return apiFetch<ExperimentRole>(`/experiment-roles/${id}/set-greeter`, {
+    method: 'POST',
+    body: JSON.stringify({ is_greeter_role: isGreeterRole }),
   })
 }
 
@@ -771,6 +781,7 @@ export interface Appointment {
   age_range_min_months: number | null
   age_range_max_months: number | null
   sibling_coming: string
+  wants_dedicated_greeter: boolean
   schedule_date: string | null
   schedule_time_start: string | null
   schedule_time_end: string | null
@@ -803,6 +814,16 @@ export function releaseAppointment(appointmentId: number): Promise<Appointment> 
 }
 export function arriveAppointment(appointmentId: number): Promise<Appointment> {
   return apiFetch<Appointment>(`/appointments/${appointmentId}/arrive`, { method: 'POST' })
+}
+// Persists on the appointment (like sibling_coming), not a per-search-only
+// checkbox: staff set it once and it stays in effect across
+// re-searches/reschedules. Only meaningful while the appointment's staff
+// assignment isn't already final -- mirrors release/arrive's status guard.
+export function setAppointmentWantsGreeter(appointmentId: number, wantsDedicatedGreeter: boolean): Promise<Appointment> {
+  return apiFetch<Appointment>(`/appointments/${appointmentId}/set-wants-greeter`, {
+    method: 'POST',
+    body: JSON.stringify({ wants_dedicated_greeter: wantsDedicatedGreeter }),
+  })
 }
 
 export interface AppointmentExperimenter {

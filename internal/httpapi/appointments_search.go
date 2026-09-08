@@ -19,10 +19,11 @@ import (
 // boundary between this package's DB/HTTP awareness and that package's
 // pure domain logic.
 type availabilitySearchInputs struct {
-	days              []scheduling.DayAvailability
-	roles             []scheduling.RoleCandidatesForSearch
-	sitterRole        *scheduling.RoleCandidatesForSearch
-	sitterRequirement scheduling.SitterRequirement
+	days                   []scheduling.DayAvailability
+	roles                  []scheduling.RoleCandidatesForSearch
+	sitterRole             *scheduling.RoleCandidatesForSearch
+	sitterRequirement      scheduling.SitterRequirement
+	dedicatedGreeterRoleID *int64
 }
 
 // buildAvailabilitySearch fetches everything a search over
@@ -51,15 +52,55 @@ func (s *Server) buildAvailabilitySearch(
 		}
 	}
 
+	greeterRoleRow, err := s.queries.GetGreeterRoleForLab(ctx, experiment.LabID)
+	hasGreeterRole := true
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			hasGreeterRole = false
+		} else {
+			return availabilitySearchInputs{}, err
+		}
+	}
+
 	// The sitter is handled separately below (its requirement depends on
 	// sibling_coming, not a flat training requirement), so exclude it here
 	// even if a lab happened to also list it as a training requirement.
+	// Same for the dedicated-greeter role -- it's added back in below,
+	// unconditionally required, only when this appointment actually
+	// requested it.
 	var roleRows []db.ExperimentRole
 	for _, role := range trainingRoles {
 		if hasSitterRole && role.ID == sitterRoleRow.ID {
 			continue
 		}
+		if hasGreeterRole && role.ID == greeterRoleRow.ID {
+			continue
+		}
 		roleRows = append(roleRows, role)
+	}
+
+	// A requested dedicated greeter has no "soft" state (unlike the
+	// sitter, which follows sibling_coming) -- it's either not requested,
+	// or requested and required -- so it folds straight into the normal
+	// required-role list rather than needing its own branching in
+	// scheduling.SearchAvailability. dedicatedGreeterRoleID is tracked
+	// separately so the caller can read GreeterID directly off this
+	// role's assignee instead of an arbitrary DesignateGreeter guess.
+	var dedicatedGreeterRoleID *int64
+	switch {
+	case appointment.WantsDedicatedGreeter && hasGreeterRole:
+		roleRows = append(roleRows, greeterRoleRow)
+		dedicatedGreeterRoleID = &greeterRoleRow.ID
+	case appointment.WantsDedicatedGreeter && !hasGreeterRole:
+		// Requested but the lab has no greeter role configured -- mirrors
+		// SitterRequired-with-no-sitterRole: never silently ignore a hard
+		// requirement the search can't fulfill. A role row with no real
+		// ID and (below) zero candidates makes the search find nothing,
+		// the same way any other role with zero trained candidates
+		// already does.
+		unfillableID := int64(-1)
+		roleRows = append(roleRows, db.ExperimentRole{ID: unfillableID})
+		dedicatedGreeterRoleID = &unfillableID
 	}
 
 	equipment, err := s.queries.ListExperimentEquipment(ctx, experiment.ID)
@@ -148,10 +189,11 @@ func (s *Server) buildAvailabilitySearch(
 	}
 
 	return availabilitySearchInputs{
-		days:              days,
-		roles:             roles,
-		sitterRole:        sitterRoleForSearch,
-		sitterRequirement: sitterRequirement,
+		days:                   days,
+		roles:                  roles,
+		sitterRole:             sitterRoleForSearch,
+		sitterRequirement:      sitterRequirement,
+		dedicatedGreeterRoleID: dedicatedGreeterRoleID,
 	}, nil
 }
 

@@ -55,6 +55,16 @@ set status = 'arrived'
 where id = sqlc.arg(id) and status = 'pending'
 returning *;
 
+-- name: SetAppointmentWantsGreeter :one
+-- Mirrors ReleaseAppointment's status guard: only while an appointment
+-- is still unscheduled or scheduled-but-not-yet-arrived does requesting
+-- a dedicated greeter mean anything -- an arrived/released/etc.
+-- appointment's staff assignment is already final (or moot).
+update appointments
+set wants_dedicated_greeter = sqlc.arg(wants_dedicated_greeter)
+where id = sqlc.arg(id) and status in ('to_be_scheduled', 'pending')
+returning *;
+
 -- name: CreateAppointmentExperimenter :one
 insert into appointment_experimenters (appointment_id, user_id, experiment_role_id, is_greeter)
 values (sqlc.arg(appointment_id), sqlc.arg(user_id), sqlc.arg(experiment_role_id), sqlc.arg(is_greeter))

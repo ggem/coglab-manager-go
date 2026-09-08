@@ -99,6 +99,9 @@ func minimalSearchQuerier(experiment db.Experiment, appointment db.Appointment) 
 		GetSitterRoleForLabFunc: func(ctx context.Context, labID int64) (db.ExperimentRole, error) {
 			return db.ExperimentRole{}, pgx.ErrNoRows
 		},
+		GetGreeterRoleForLabFunc: func(ctx context.Context, labID int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{}, pgx.ErrNoRows
+		},
 		ListExperimentEquipmentFunc: func(ctx context.Context, experimentID int64) ([]db.Equipment, error) {
 			return nil, nil
 		},
@@ -426,6 +429,73 @@ func TestHandleArriveAppointment_UnexpectedDBError(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleSetAppointmentWantsGreeter_Success(t *testing.T) {
+	var captured db.SetAppointmentWantsGreeterParams
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		SetAppointmentWantsGreeterFunc: func(ctx context.Context, arg db.SetAppointmentWantsGreeterParams) (db.Appointment, error) {
+			captured = arg
+			return db.Appointment{ID: arg.ID, Status: "to_be_scheduled", WantsDedicatedGreeter: arg.WantsDedicatedGreeter}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/set-wants-greeter", cookie, setAppointmentWantsGreeterRequest{WantsDedicatedGreeter: true})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if captured.ID != 3 || !captured.WantsDedicatedGreeter {
+		t.Errorf("SetAppointmentWantsGreeter params = %+v", captured)
+	}
+	got := decodeBody[appointmentResponse](t, rec)
+	if !got.WantsDedicatedGreeter {
+		t.Errorf("response WantsDedicatedGreeter = false, want true")
+	}
+}
+
+// TestHandleSetAppointmentWantsGreeter_WrongStatus covers an appointment
+// whose staff assignment is already final (arrived/released/etc.):
+// SetAppointmentWantsGreeter's WHERE clause matches no row, so
+// pgx.ErrNoRows becomes a 404 via writeDBError.
+func TestHandleSetAppointmentWantsGreeter_WrongStatus(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 1, nil
+		},
+		SetAppointmentWantsGreeterFunc: func(ctx context.Context, arg db.SetAppointmentWantsGreeterParams) (db.Appointment, error) {
+			return db.Appointment{}, pgx.ErrNoRows
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/3/set-wants-greeter", cookie, setAppointmentWantsGreeterRequest{WantsDedicatedGreeter: true})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleSetAppointmentWantsGreeter_NotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		GetAppointmentLabIDFunc: func(ctx context.Context, id int64) (int64, error) {
+			return 0, pgx.ErrNoRows
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/appointments/404/set-wants-greeter", cookie, setAppointmentWantsGreeterRequest{WantsDedicatedGreeter: true})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

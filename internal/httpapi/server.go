@@ -279,6 +279,7 @@ func (s *Server) Routes() http.Handler {
 			r.Put("/", s.handleUpdateExperimentRole)
 			r.Post("/deactivate", s.handleDeactivateExperimentRole)
 			r.Post("/set-sitter", s.handleSetExperimentRoleSitter)
+			r.Post("/set-greeter", s.handleSetExperimentRoleGreeter)
 			r.Route("/trainings", func(r chi.Router) {
 				r.Post("/", s.handleAddLabMemberTraining)
 				r.Get("/", s.handleListLabMemberTrainingsForRole)
@@ -328,6 +329,7 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/schedule", s.handleScheduleAppointment)
 			r.Post("/release", s.handleReleaseAppointment)
 			r.Post("/arrive", s.handleArriveAppointment)
+			r.Post("/set-wants-greeter", s.handleSetAppointmentWantsGreeter)
 			r.Get("/experimenters", s.handleListAppointmentExperimenters)
 			r.Route("/notes", func(r chi.Router) {
 				r.Post("/", s.handleCreateAppointmentNote)

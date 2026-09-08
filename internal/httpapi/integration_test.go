@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -753,6 +754,344 @@ func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
 	if got := candidates[0].Assignment[role.ID]; got != undergrad.ID {
 		t.Errorf("assignment[role %d] = %d, want undergrad %d (lower priority should be scheduled first, not director %d)",
 			role.ID, got, undergrad.ID, director.ID)
+	}
+}
+
+// TestSchedulingFlow_DedicatedGreeter_Integration proves the live
+// greeter-only scheduling feature end-to-end against real SQL: marking
+// an appointment as wanting a dedicated greeter, with the lab's Greeter
+// role designated, makes the search require and fill that role, sets
+// GreeterID to its assignee (not an arbitrary DesignateGreeter pick),
+// and the commit path (which already generically sets IsGreeter from
+// GreeterID -- no changes needed there) lands is_greeter=true on the
+// right row. The greeter is a different person from whoever fills the
+// experiment's own training-requirement role, confirming this is a real
+// second assignment, not the existing "someone already filling a role
+// also gets flagged greeter" behavior.
+func TestSchedulingFlow_DedicatedGreeter_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Dedicated Greeter Test Lab", fmt.Sprintf("dgl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("greeter-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+	experimenter, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("greeter-experimenter-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Experimenter", LastName: "Candidate",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(experimenter): %v", err)
+	}
+	greeter, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("greeter-greeter-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Greeter", LastName: "Candidate",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(greeter): %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("greeter-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	// Two roles: Experimenter (a real training requirement) and Greeter
+	// (designated via set-greeter, not a training requirement -- it's
+	// only required when an appointment explicitly requests it).
+	var experimenterRole, greeterRole experimentRoleResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiment-roles/", labID), experimentRoleRequest{Name: "Experimenter"}), &experimenterRole)
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiment-roles/", labID), experimentRoleRequest{Name: "Greeter"}), &greeterRole)
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/set-greeter", greeterRole.ID), setExperimentRoleGreeterRequest{IsGreeterRole: true}); rec.Code != http.StatusOK {
+		t.Fatalf("set-greeter status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", experimenterRole.ID), addLabMemberTrainingRequest{UserID: experimenter.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add experimenter training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", greeterRole.ID), addLabMemberTrainingRequest{UserID: greeter.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add greeter training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	targetDate := time.Now().UTC().Truncate(24 * time.Hour)
+	weekday := int16(targetDate.Weekday())
+	for _, userID := range []int64{experimenter.ID, greeter.ID} {
+		if _, err := testPool.Exec(ctx,
+			"insert into lab_availability_general (user_id, lab_id, weekday, start_time, end_time) values ($1,$2,$3,$4,$5)",
+			userID, labID, weekday, "08:00", "18:00"); err != nil {
+			t.Fatalf("insert lab_availability_general for user %d: %v", userID, err)
+		}
+	}
+
+	minAge, maxAge := 6.0, 60.0
+	experimentRec := do(http.MethodPost, fmt.Sprintf("/labs/%d/experiments/", labID), experimentRequest{
+		Name: "Dedicated Greeter Integration Study", Status: "not_run", Sessions: 1, DurationMinutes: 30,
+		AgeRangeMinMonths: &minAge, AgeRangeMaxMonths: &maxAge,
+	})
+	if experimentRec.Code != http.StatusCreated {
+		t.Fatalf("create experiment status = %d, want %d; body = %s", experimentRec.Code, http.StatusCreated, experimentRec.Body)
+	}
+	var experiment experimentResponse
+	decode(experimentRec, &experiment)
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/training-requirements/", experiment.ID), addTrainingRequirementRequest{ExperimentRoleID: experimenterRole.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add training requirement status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	var family familyResponse
+	decode(do(http.MethodPost, "/families/", familyRequest{Address: "1 Main St", City: "Boulder", State: "CO", Zip: "80301"}), &family)
+	var child childResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/families/%d/children/", family.ID), childRequest{
+		FirstName: "Kid", LastName: "Test", Sex: "unknown", Response: "unknown",
+	}), &child)
+
+	var appointment appointmentResponse
+	appointmentRec := do(http.MethodPost, fmt.Sprintf("/experiments/%d/appointments", experiment.ID), appointmentRequest{
+		ChildID: child.ID, SiblingComing: "not_coming",
+	})
+	if appointmentRec.Code != http.StatusCreated {
+		t.Fatalf("create appointment status = %d, want %d; body = %s", appointmentRec.Code, http.StatusCreated, appointmentRec.Body)
+	}
+	decode(appointmentRec, &appointment)
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/appointments/%d/set-wants-greeter", appointment.ID), setAppointmentWantsGreeterRequest{WantsDedicatedGreeter: true}); rec.Code != http.StatusOK {
+		t.Fatalf("set-wants-greeter status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+
+	dateStr := targetDate.Format(dateLayout)
+	var candidates []candidateSlotResponse
+	searchRec := do(http.MethodGet, fmt.Sprintf("/appointments/%d/availability?start_date=%s&end_date=%s", appointment.ID, dateStr, dateStr), nil)
+	if searchRec.Code != http.StatusOK {
+		t.Fatalf("search availability status = %d, want %d; body = %s", searchRec.Code, http.StatusOK, searchRec.Body)
+	}
+	decode(searchRec, &candidates)
+	if len(candidates) == 0 {
+		t.Fatal("expected candidate slots: both candidates are free all day and the experiment needs only 30 minutes")
+	}
+	first := candidates[0]
+	if first.Assignment[experimenterRole.ID] != experimenter.ID {
+		t.Errorf("assignment[experimenter role %d] = %d, want %d", experimenterRole.ID, first.Assignment[experimenterRole.ID], experimenter.ID)
+	}
+	if first.Assignment[greeterRole.ID] != greeter.ID {
+		t.Errorf("assignment[greeter role %d] = %d, want %d", greeterRole.ID, first.Assignment[greeterRole.ID], greeter.ID)
+	}
+	if first.GreeterID != greeter.ID {
+		t.Errorf("GreeterID = %d, want %d (the dedicated greeter role's assignee, not an arbitrary DesignateGreeter pick)", first.GreeterID, greeter.ID)
+	}
+
+	scheduleRec := do(http.MethodPost, fmt.Sprintf("/appointments/%d/schedule", appointment.ID), scheduleAppointmentRequest{
+		Date: dateStr, StartTime: first.StartTime,
+	})
+	if scheduleRec.Code != http.StatusOK {
+		t.Fatalf("schedule status = %d, want %d; body = %s", scheduleRec.Code, http.StatusOK, scheduleRec.Body)
+	}
+
+	// Verify the actual committed staff assignment against real SQL:
+	// exactly two rows, the greeter's row (and only the greeter's row)
+	// flagged is_greeter, and it's a distinct person from whoever filled
+	// the experimenter role.
+	rows, err := testPool.Query(ctx,
+		"select user_id, experiment_role_id, is_greeter from appointment_experimenters where appointment_id = $1 order by experiment_role_id",
+		appointment.ID)
+	if err != nil {
+		t.Fatalf("query appointment_experimenters: %v", err)
+	}
+	type row struct {
+		userID, roleID int64
+		isGreeter      bool
+	}
+	var rowsGot []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.userID, &r.roleID, &r.isGreeter); err != nil {
+			t.Fatalf("scan appointment_experimenters row: %v", err)
+		}
+		rowsGot = append(rowsGot, r)
+	}
+	rows.Close()
+	if len(rowsGot) != 2 {
+		t.Fatalf("appointment_experimenters rows = %+v, want 2", rowsGot)
+	}
+	for _, r := range rowsGot {
+		wantGreeter := r.roleID == greeterRole.ID
+		if r.isGreeter != wantGreeter {
+			t.Errorf("row %+v: is_greeter = %v, want %v", r, r.isGreeter, wantGreeter)
+		}
+		if r.roleID == greeterRole.ID && r.userID != greeter.ID {
+			t.Errorf("greeter role's user_id = %d, want %d", r.userID, greeter.ID)
+		}
+		if r.roleID == experimenterRole.ID && r.userID != experimenter.ID {
+			t.Errorf("experimenter role's user_id = %d, want %d", r.userID, experimenter.ID)
+		}
+	}
+}
+
+// TestDeactivateExperimentRole_ClearsSitterAndGreeterRoles_Integration
+// proves the real SQL behavior fixed in response to code review: a role
+// currently designated as the lab's sitter and/or greeter role must not
+// remain so after deactivation (it would otherwise silently keep blocking
+// scheduling searches for a role that's no longer meant to be used, with
+// no UI signal explaining why). Also proves the defense-in-depth WHERE
+// clause on SetExperimentRoleSitter/SetExperimentRoleGreeter rejects
+// designating an already-deactivated role at the SQL level, independent
+// of the handler's own check.
+func TestDeactivateExperimentRole_ClearsSitterAndGreeterRoles_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Deactivate Role Test Lab", fmt.Sprintf("drtl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	email := fmt.Sprintf("deactivate-role-actor-%d@example.edu", time.Now().UnixNano())
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email: email, FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	var roleID int64
+	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
+		fmt.Sprintf("deactivate-role-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+		t.Fatalf("insert lab_membership: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	var role experimentRoleResponse
+	decode(do(http.MethodPost, fmt.Sprintf("/labs/%d/experiment-roles/", labID), experimentRoleRequest{Name: "Greeter/Sitter"}), &role)
+
+	// A single role can hold both designations at once -- they're
+	// independent per-lab constraints, not mutually exclusive.
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/set-sitter", role.ID), setExperimentRoleSitterRequest{IsSitterRole: true}); rec.Code != http.StatusOK {
+		t.Fatalf("set-sitter status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/set-greeter", role.ID), setExperimentRoleGreeterRequest{IsGreeterRole: true}); rec.Code != http.StatusOK {
+		t.Fatalf("set-greeter status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/deactivate", role.ID), nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("deactivate status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	var afterDeactivate experimentRoleResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/experiment-roles/%d/", role.ID), nil), &afterDeactivate)
+	if !afterDeactivate.Deactivated {
+		t.Error("Deactivated = false, want true")
+	}
+	if afterDeactivate.IsSitterRole {
+		t.Error("IsSitterRole = true after deactivation, want false")
+	}
+	if afterDeactivate.IsGreeterRole {
+		t.Error("IsGreeterRole = true after deactivation, want false")
+	}
+
+	// GetSitterRoleForLab/GetGreeterRoleForLab must never resolve to a
+	// deactivated role -- confirms the search-building code's
+	// "hasSitterRole"/"hasGreeterRole" checks correctly see this lab as
+	// having neither configured anymore, rather than pointing at a
+	// retired role.
+	if _, err := testQueries.GetSitterRoleForLab(ctx, labID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetSitterRoleForLab after deactivation: err = %v, want pgx.ErrNoRows", err)
+	}
+	if _, err := testQueries.GetGreeterRoleForLab(ctx, labID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetGreeterRoleForLab after deactivation: err = %v, want pgx.ErrNoRows", err)
+	}
+
+	// Defense-in-depth: the query's own WHERE clause rejects designating
+	// an already-deactivated role, independent of the handler-level
+	// check (called directly here to bypass that check and exercise the
+	// SQL guard on its own).
+	if _, err := testQueries.SetExperimentRoleSitter(ctx, db.SetExperimentRoleSitterParams{ID: role.ID, IsSitterRole: true}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("SetExperimentRoleSitter(true) on a deactivated role: err = %v, want pgx.ErrNoRows", err)
+	}
+	if _, err := testQueries.SetExperimentRoleGreeter(ctx, db.SetExperimentRoleGreeterParams{ID: role.ID, IsGreeterRole: true}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("SetExperimentRoleGreeter(true) on a deactivated role: err = %v, want pgx.ErrNoRows", err)
 	}
 }
 

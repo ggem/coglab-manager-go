@@ -15,7 +15,7 @@ const arriveAppointment = `-- name: ArriveAppointment :one
 update appointments
 set status = 'arrived'
 where id = $1 and status = 'pending'
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter
 `
 
 // Only a scheduled ('pending') appointment can arrive -- an unscheduled
@@ -44,6 +44,7 @@ func (q *Queries) ArriveAppointment(ctx context.Context, id int64) (Appointment,
 		&i.TypeOfCar,
 		&i.ParticipantNumber,
 		&i.TokenID,
+		&i.WantsDedicatedGreeter,
 	)
 	return i, err
 }
@@ -54,7 +55,7 @@ values (
     $1, $2, $3,
     $4, $5, $6
 )
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter
 `
 
 type CreateAppointmentParams struct {
@@ -95,6 +96,7 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.TypeOfCar,
 		&i.ParticipantNumber,
 		&i.TokenID,
+		&i.WantsDedicatedGreeter,
 	)
 	return i, err
 }
@@ -131,7 +133,7 @@ func (q *Queries) CreateAppointmentExperimenter(ctx context.Context, arg CreateA
 }
 
 const getAppointmentByID = `-- name: GetAppointmentByID :one
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id from appointments where id = $1
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter from appointments where id = $1
 `
 
 func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment, error) {
@@ -156,6 +158,7 @@ func (q *Queries) GetAppointmentByID(ctx context.Context, id int64) (Appointment
 		&i.TypeOfCar,
 		&i.ParticipantNumber,
 		&i.TokenID,
+		&i.WantsDedicatedGreeter,
 	)
 	return i, err
 }
@@ -226,7 +229,7 @@ func (q *Queries) ListAppointmentExperimenters(ctx context.Context, appointmentI
 }
 
 const listAppointmentsByChild = `-- name: ListAppointmentsByChild :many
-select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, experiments.name as experiment_name
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, appointments.wants_dedicated_greeter, experiments.name as experiment_name
 from appointments
 join experiments on experiments.id = appointments.experiment_id
 where appointments.child_id = $1
@@ -235,25 +238,26 @@ order by appointments.schedule_date desc nulls last, appointments.created_at des
 `
 
 type ListAppointmentsByChildRow struct {
-	ID                int64              `json:"id"`
-	ExperimentID      int64              `json:"experiment_id"`
-	ChildID           int64              `json:"child_id"`
-	Session           int16              `json:"session"`
-	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
-	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
-	SiblingComing     string             `json:"sibling_coming"`
-	ScheduleDate      pgtype.Date        `json:"schedule_date"`
-	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
-	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
-	Status            string             `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
-	DataStatus        string             `json:"data_status"`
-	TypeOfCar         string             `json:"type_of_car"`
-	ParticipantNumber string             `json:"participant_number"`
-	TokenID           *int64             `json:"token_id"`
-	ExperimentName    string             `json:"experiment_name"`
+	ID                    int64              `json:"id"`
+	ExperimentID          int64              `json:"experiment_id"`
+	ChildID               int64              `json:"child_id"`
+	Session               int16              `json:"session"`
+	AgeRangeMinMonths     pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths     pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing         string             `json:"sibling_coming"`
+	ScheduleDate          pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart     pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd       pgtype.Time        `json:"schedule_time_end"`
+	Status                string             `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt        pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus            string             `json:"data_status"`
+	TypeOfCar             string             `json:"type_of_car"`
+	ParticipantNumber     string             `json:"participant_number"`
+	TokenID               *int64             `json:"token_id"`
+	WantsDedicatedGreeter bool               `json:"wants_dedicated_greeter"`
+	ExperimentName        string             `json:"experiment_name"`
 }
 
 // A child's own appointment history across every experiment, excluding
@@ -287,6 +291,7 @@ func (q *Queries) ListAppointmentsByChild(ctx context.Context, childID int64) ([
 			&i.TypeOfCar,
 			&i.ParticipantNumber,
 			&i.TokenID,
+			&i.WantsDedicatedGreeter,
 			&i.ExperimentName,
 		); err != nil {
 			return nil, err
@@ -300,7 +305,7 @@ func (q *Queries) ListAppointmentsByChild(ctx context.Context, childID int64) ([
 }
 
 const listAppointmentsByExperiment = `-- name: ListAppointmentsByExperiment :many
-select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id from appointments
+select id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter from appointments
 where experiment_id = $1
   and ($2::text is null or status = $2)
 order by created_at
@@ -339,6 +344,7 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 			&i.TypeOfCar,
 			&i.ParticipantNumber,
 			&i.TokenID,
+			&i.WantsDedicatedGreeter,
 		); err != nil {
 			return nil, err
 		}
@@ -351,7 +357,7 @@ func (q *Queries) ListAppointmentsByExperiment(ctx context.Context, arg ListAppo
 }
 
 const listAppointmentsBySiblings = `-- name: ListAppointmentsBySiblings :many
-select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, experiments.name as experiment_name,
+select appointments.id, appointments.experiment_id, appointments.child_id, appointments.session, appointments.age_range_min_months, appointments.age_range_max_months, appointments.sibling_coming, appointments.schedule_date, appointments.schedule_time_start, appointments.schedule_time_end, appointments.status, appointments.created_at, appointments.updated_at, appointments.reminder_sent_at, appointments.data_status, appointments.type_of_car, appointments.participant_number, appointments.token_id, appointments.wants_dedicated_greeter, experiments.name as experiment_name,
        children.first_name as child_first_name, children.last_name as child_last_name
 from appointments
 join experiments on experiments.id = appointments.experiment_id
@@ -363,27 +369,28 @@ order by appointments.schedule_date desc nulls last, appointments.created_at des
 `
 
 type ListAppointmentsBySiblingsRow struct {
-	ID                int64              `json:"id"`
-	ExperimentID      int64              `json:"experiment_id"`
-	ChildID           int64              `json:"child_id"`
-	Session           int16              `json:"session"`
-	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
-	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
-	SiblingComing     string             `json:"sibling_coming"`
-	ScheduleDate      pgtype.Date        `json:"schedule_date"`
-	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
-	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
-	Status            string             `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
-	DataStatus        string             `json:"data_status"`
-	TypeOfCar         string             `json:"type_of_car"`
-	ParticipantNumber string             `json:"participant_number"`
-	TokenID           *int64             `json:"token_id"`
-	ExperimentName    string             `json:"experiment_name"`
-	ChildFirstName    string             `json:"child_first_name"`
-	ChildLastName     string             `json:"child_last_name"`
+	ID                    int64              `json:"id"`
+	ExperimentID          int64              `json:"experiment_id"`
+	ChildID               int64              `json:"child_id"`
+	Session               int16              `json:"session"`
+	AgeRangeMinMonths     pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths     pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing         string             `json:"sibling_coming"`
+	ScheduleDate          pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart     pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd       pgtype.Time        `json:"schedule_time_end"`
+	Status                string             `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt        pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus            string             `json:"data_status"`
+	TypeOfCar             string             `json:"type_of_car"`
+	ParticipantNumber     string             `json:"participant_number"`
+	TokenID               *int64             `json:"token_id"`
+	WantsDedicatedGreeter bool               `json:"wants_dedicated_greeter"`
+	ExperimentName        string             `json:"experiment_name"`
+	ChildFirstName        string             `json:"child_first_name"`
+	ChildLastName         string             `json:"child_last_name"`
 }
 
 // Same as ListAppointmentsByChild, for the child's siblings (other
@@ -417,6 +424,7 @@ func (q *Queries) ListAppointmentsBySiblings(ctx context.Context, childID int64)
 			&i.TypeOfCar,
 			&i.ParticipantNumber,
 			&i.TokenID,
+			&i.WantsDedicatedGreeter,
 			&i.ExperimentName,
 			&i.ChildFirstName,
 			&i.ChildLastName,
@@ -540,7 +548,7 @@ const releaseAppointment = `-- name: ReleaseAppointment :one
 update appointments
 set status = 'released'
 where id = $1 and status in ('to_be_scheduled', 'pending')
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter
 `
 
 // Deliberately allows releasing a 'pending' (already time-scheduled)
@@ -569,6 +577,7 @@ func (q *Queries) ReleaseAppointment(ctx context.Context, id int64) (Appointment
 		&i.TypeOfCar,
 		&i.ParticipantNumber,
 		&i.TokenID,
+		&i.WantsDedicatedGreeter,
 	)
 	return i, err
 }
@@ -580,7 +589,7 @@ set schedule_date = $1,
     schedule_time_end = $3,
     status = 'pending'
 where id = $4
-returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter
 `
 
 type ScheduleAppointmentParams struct {
@@ -621,6 +630,50 @@ func (q *Queries) ScheduleAppointment(ctx context.Context, arg ScheduleAppointme
 		&i.TypeOfCar,
 		&i.ParticipantNumber,
 		&i.TokenID,
+		&i.WantsDedicatedGreeter,
+	)
+	return i, err
+}
+
+const setAppointmentWantsGreeter = `-- name: SetAppointmentWantsGreeter :one
+update appointments
+set wants_dedicated_greeter = $1
+where id = $2 and status in ('to_be_scheduled', 'pending')
+returning id, experiment_id, child_id, session, age_range_min_months, age_range_max_months, sibling_coming, schedule_date, schedule_time_start, schedule_time_end, status, created_at, updated_at, reminder_sent_at, data_status, type_of_car, participant_number, token_id, wants_dedicated_greeter
+`
+
+type SetAppointmentWantsGreeterParams struct {
+	WantsDedicatedGreeter bool  `json:"wants_dedicated_greeter"`
+	ID                    int64 `json:"id"`
+}
+
+// Mirrors ReleaseAppointment's status guard: only while an appointment
+// is still unscheduled or scheduled-but-not-yet-arrived does requesting
+// a dedicated greeter mean anything -- an arrived/released/etc.
+// appointment's staff assignment is already final (or moot).
+func (q *Queries) SetAppointmentWantsGreeter(ctx context.Context, arg SetAppointmentWantsGreeterParams) (Appointment, error) {
+	row := q.db.QueryRow(ctx, setAppointmentWantsGreeter, arg.WantsDedicatedGreeter, arg.ID)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.ExperimentID,
+		&i.ChildID,
+		&i.Session,
+		&i.AgeRangeMinMonths,
+		&i.AgeRangeMaxMonths,
+		&i.SiblingComing,
+		&i.ScheduleDate,
+		&i.ScheduleTimeStart,
+		&i.ScheduleTimeEnd,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReminderSentAt,
+		&i.DataStatus,
+		&i.TypeOfCar,
+		&i.ParticipantNumber,
+		&i.TokenID,
+		&i.WantsDedicatedGreeter,
 	)
 	return i, err
 }

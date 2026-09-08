@@ -13,6 +13,7 @@ const (
 	ActionExperimentRoleUpdated     = "experiment_role.updated"
 	ActionExperimentRoleDeactivated = "experiment_role.deactivated"
 	ActionExperimentRoleSitterSet   = "experiment_role.sitter_set"
+	ActionExperimentRoleGreeterSet  = "experiment_role.greeter_set"
 )
 
 type experimentRoleRequest struct {
@@ -20,24 +21,26 @@ type experimentRoleRequest struct {
 }
 
 type experimentRoleResponse struct {
-	ID           int64     `json:"id"`
-	LabID        int64     `json:"lab_id"`
-	Name         string    `json:"name"`
-	IsSitterRole bool      `json:"is_sitter_role"`
-	Deactivated  bool      `json:"deactivated"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            int64     `json:"id"`
+	LabID         int64     `json:"lab_id"`
+	Name          string    `json:"name"`
+	IsSitterRole  bool      `json:"is_sitter_role"`
+	IsGreeterRole bool      `json:"is_greeter_role"`
+	Deactivated   bool      `json:"deactivated"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func experimentRoleToResponse(role db.ExperimentRole) experimentRoleResponse {
 	return experimentRoleResponse{
-		ID:           role.ID,
-		LabID:        role.LabID,
-		Name:         role.Name,
-		IsSitterRole: role.IsSitterRole,
-		Deactivated:  role.DeactivatedAt.Valid,
-		CreatedAt:    role.CreatedAt.Time,
-		UpdatedAt:    role.UpdatedAt.Time,
+		ID:            role.ID,
+		LabID:         role.LabID,
+		Name:          role.Name,
+		IsSitterRole:  role.IsSitterRole,
+		IsGreeterRole: role.IsGreeterRole,
+		Deactivated:   role.DeactivatedAt.Valid,
+		CreatedAt:     role.CreatedAt.Time,
+		UpdatedAt:     role.UpdatedAt.Time,
 	}
 }
 
@@ -182,6 +185,23 @@ func (s *Server) handleSetExperimentRoleSitter(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Setting true on a deactivated role is rejected by the query's WHERE
+	// clause too (zero rows), but that alone would surface as a
+	// misleading 404 (the role does exist) -- check explicitly here for a
+	// clear 400 instead. Unsetting (false) skips this: always allowed,
+	// even for a deactivated role, to clean up a stale flag.
+	if req.IsSitterRole {
+		existing, err := s.queries.GetExperimentRoleByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if existing.DeactivatedAt.Valid {
+			writeError(w, http.StatusBadRequest, "cannot designate a deactivated role as the sitter role")
+			return
+		}
+	}
+
 	role, err := s.queries.SetExperimentRoleSitter(r.Context(), db.SetExperimentRoleSitterParams{
 		ID:           id,
 		IsSitterRole: req.IsSitterRole,
@@ -198,6 +218,63 @@ func (s *Server) handleSetExperimentRoleSitter(w http.ResponseWriter, r *http.Re
 		EntityType:  ptr("experiment_role"),
 		EntityID:    &role.ID,
 		Metadata:    map[string]bool{"is_sitter_role": req.IsSitterRole},
+	})
+
+	writeJSON(w, http.StatusOK, experimentRoleToResponse(role))
+}
+
+type setExperimentRoleGreeterRequest struct {
+	IsGreeterRole bool `json:"is_greeter_role"`
+}
+
+// handleSetExperimentRoleGreeter mirrors handleSetExperimentRoleSitter:
+// designates (or un-designates) a role as the lab's dedicated-greeter
+// role -- at most one per lab, enforced by a partial unique index.
+// Setting a second role true while one's already set is rejected as a
+// conflict; the caller must unset the old one first.
+func (s *Server) handleSetExperimentRoleGreeter(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r, "roleID")
+	if !ok {
+		return
+	}
+
+	var req setExperimentRoleGreeterRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Mirrors handleSetExperimentRoleSitter's deactivated-role guard: a
+	// clear 400 rather than a misleading 404 from the query's WHERE
+	// clause. Unsetting (false) always goes through.
+	if req.IsGreeterRole {
+		existing, err := s.queries.GetExperimentRoleByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if existing.DeactivatedAt.Valid {
+			writeError(w, http.StatusBadRequest, "cannot designate a deactivated role as the greeter role")
+			return
+		}
+	}
+
+	role, err := s.queries.SetExperimentRoleGreeter(r.Context(), db.SetExperimentRoleGreeterParams{
+		ID:            id,
+		IsGreeterRole: req.IsGreeterRole,
+	})
+	if err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: currentUserID(r.Context()),
+		LabID:       &role.LabID,
+		Action:      ActionExperimentRoleGreeterSet,
+		EntityType:  ptr("experiment_role"),
+		EntityID:    &role.ID,
+		Metadata:    map[string]bool{"is_greeter_role": req.IsGreeterRole},
 	})
 
 	writeJSON(w, http.StatusOK, experimentRoleToResponse(role))

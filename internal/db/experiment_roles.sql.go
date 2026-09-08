@@ -11,7 +11,7 @@ import (
 
 const createExperimentRole = `-- name: CreateExperimentRole :one
 insert into experiment_roles (lab_id, name) values ($1, $2)
-returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role
 `
 
 type CreateExperimentRoleParams struct {
@@ -30,21 +30,30 @@ func (q *Queries) CreateExperimentRole(ctx context.Context, arg CreateExperiment
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsSitterRole,
+		&i.IsGreeterRole,
 	)
 	return i, err
 }
 
 const deactivateExperimentRole = `-- name: DeactivateExperimentRole :exec
-update experiment_roles set deactivated_at = now() where id = $1
+update experiment_roles set deactivated_at = now(), is_sitter_role = false, is_greeter_role = false
+where id = $1
 `
 
+// Also clears is_sitter_role/is_greeter_role: a deactivated role retiring
+// from the lab's normal training-requirement machinery should retire
+// from these designations too, rather than leaving a dangling "this
+// retired role is still the lab's sitter/greeter" state that only a raw
+// DB query would reveal (GetSitterRoleForLab/GetGreeterRoleForLab below
+// also filter deactivated_at as defense in depth, but a lab should never
+// end up needing that filter to matter).
 func (q *Queries) DeactivateExperimentRole(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deactivateExperimentRole, id)
 	return err
 }
 
 const getExperimentRoleByID = `-- name: GetExperimentRoleByID :one
-select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where id = $1
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role from experiment_roles where id = $1
 `
 
 func (q *Queries) GetExperimentRoleByID(ctx context.Context, id int64) (ExperimentRole, error) {
@@ -58,12 +67,33 @@ func (q *Queries) GetExperimentRoleByID(ctx context.Context, id int64) (Experime
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsSitterRole,
+		&i.IsGreeterRole,
+	)
+	return i, err
+}
+
+const getGreeterRoleForLab = `-- name: GetGreeterRoleForLab :one
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role from experiment_roles where lab_id = $1 and is_greeter_role and deactivated_at is null
+`
+
+func (q *Queries) GetGreeterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error) {
+	row := q.db.QueryRow(ctx, getGreeterRoleForLab, labID)
+	var i ExperimentRole
+	err := row.Scan(
+		&i.ID,
+		&i.LabID,
+		&i.Name,
+		&i.DeactivatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSitterRole,
+		&i.IsGreeterRole,
 	)
 	return i, err
 }
 
 const getSitterRoleForLab = `-- name: GetSitterRoleForLab :one
-select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where lab_id = $1 and is_sitter_role
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role from experiment_roles where lab_id = $1 and is_sitter_role and deactivated_at is null
 `
 
 func (q *Queries) GetSitterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error) {
@@ -77,12 +107,13 @@ func (q *Queries) GetSitterRoleForLab(ctx context.Context, labID int64) (Experim
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsSitterRole,
+		&i.IsGreeterRole,
 	)
 	return i, err
 }
 
 const listExperimentRolesByLab = `-- name: ListExperimentRolesByLab :many
-select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role from experiment_roles where lab_id = $1 order by name
+select id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role from experiment_roles where lab_id = $1 order by name
 `
 
 func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]ExperimentRole, error) {
@@ -102,6 +133,7 @@ func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.IsSitterRole,
+			&i.IsGreeterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -113,10 +145,44 @@ func (q *Queries) ListExperimentRolesByLab(ctx context.Context, labID int64) ([]
 	return items, nil
 }
 
+const setExperimentRoleGreeter = `-- name: SetExperimentRoleGreeter :one
+update experiment_roles set is_greeter_role = $1
+where id = $2
+  and ($1 = false or deactivated_at is null)
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role
+`
+
+type SetExperimentRoleGreeterParams struct {
+	IsGreeterRole bool  `json:"is_greeter_role"`
+	ID            int64 `json:"id"`
+}
+
+// Mirrors SetExperimentRoleSitter: a dedicated action, not part of
+// UpdateExperimentRole, with its own constraint (at most one greeter
+// role per lab, enforced by a partial unique index), the same
+// deactivated-role guard on setting true, and the same
+// always-allow-unset behavior.
+func (q *Queries) SetExperimentRoleGreeter(ctx context.Context, arg SetExperimentRoleGreeterParams) (ExperimentRole, error) {
+	row := q.db.QueryRow(ctx, setExperimentRoleGreeter, arg.IsGreeterRole, arg.ID)
+	var i ExperimentRole
+	err := row.Scan(
+		&i.ID,
+		&i.LabID,
+		&i.Name,
+		&i.DeactivatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSitterRole,
+		&i.IsGreeterRole,
+	)
+	return i, err
+}
+
 const setExperimentRoleSitter = `-- name: SetExperimentRoleSitter :one
 update experiment_roles set is_sitter_role = $1
 where id = $2
-returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
+  and ($1 = false or deactivated_at is null)
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role
 `
 
 type SetExperimentRoleSitterParams struct {
@@ -128,7 +194,11 @@ type SetExperimentRoleSitterParams struct {
 // the sitter role is a distinct decision from renaming a role. The
 // partial unique index (at most one sitter role per lab) rejects setting
 // a second role true while one's already set -- the caller must unset the
-// old one first, this doesn't swap automatically.
+// old one first, this doesn't swap automatically. Setting true is
+// rejected (zero rows) for an already-deactivated role -- the caller
+// (handleSetExperimentRoleSitter) checks this first for a clean 400
+// rather than a confusing 404; unsetting (false) is always allowed
+// regardless of deactivated status, to clean up any stale flag.
 func (q *Queries) SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error) {
 	row := q.db.QueryRow(ctx, setExperimentRoleSitter, arg.IsSitterRole, arg.ID)
 	var i ExperimentRole
@@ -140,13 +210,14 @@ func (q *Queries) SetExperimentRoleSitter(ctx context.Context, arg SetExperiment
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsSitterRole,
+		&i.IsGreeterRole,
 	)
 	return i, err
 }
 
 const updateExperimentRole = `-- name: UpdateExperimentRole :one
 update experiment_roles set name = $1 where id = $2
-returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role
+returning id, lab_id, name, deactivated_at, created_at, updated_at, is_sitter_role, is_greeter_role
 `
 
 type UpdateExperimentRoleParams struct {
@@ -165,6 +236,7 @@ func (q *Queries) UpdateExperimentRole(ctx context.Context, arg UpdateExperiment
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsSitterRole,
+		&i.IsGreeterRole,
 	)
 	return i, err
 }

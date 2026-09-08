@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
@@ -274,10 +276,152 @@ func TestHandleSetExperimentRoleSitter_AlreadyOneInLab(t *testing.T) {
 	}
 }
 
+// TestHandleSetExperimentRoleSitter_DeactivatedRole covers trying to
+// designate an already-deactivated role as the sitter role: rejected with
+// a clear 400 (checked explicitly in the handler) rather than the
+// confusing 404 the query's WHERE clause alone would produce.
+func TestHandleSetExperimentRoleSitter_DeactivatedRole(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: true})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
+	}
+}
+
+// TestHandleSetExperimentRoleSitter_UnsetAllowedOnDeactivatedRole covers
+// unsetting (false): always allowed regardless of deactivated status, to
+// clean up a stale flag -- the handler skips the deactivated check
+// entirely on this path.
+func TestHandleSetExperimentRoleSitter_UnsetAllowedOnDeactivatedRole(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+		SetExperimentRoleSitterFunc: func(ctx context.Context, arg db.SetExperimentRoleSitterParams) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: arg.ID, LabID: 1, IsSitterRole: false, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: false})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+}
+
 func TestHandleSetExperimentRoleSitter_InvalidID(t *testing.T) {
 	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
 
 	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/not-a-number/set-sitter", cookie, setExperimentRoleSitterRequest{IsSitterRole: true})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleSetExperimentRoleGreeter_Success(t *testing.T) {
+	var captured db.SetExperimentRoleGreeterParams
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
+		SetExperimentRoleGreeterFunc: func(ctx context.Context, arg db.SetExperimentRoleGreeterParams) (db.ExperimentRole, error) {
+			captured = arg
+			return db.ExperimentRole{ID: arg.ID, LabID: 1, IsGreeterRole: arg.IsGreeterRole}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-greeter", cookie, setExperimentRoleGreeterRequest{IsGreeterRole: true})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if captured.ID != 3 || !captured.IsGreeterRole {
+		t.Errorf("SetExperimentRoleGreeter params = %+v", captured)
+	}
+	got := decodeBody[experimentRoleResponse](t, rec)
+	if !got.IsGreeterRole {
+		t.Errorf("response IsGreeterRole = false, want true")
+	}
+}
+
+func TestHandleSetExperimentRoleGreeter_AlreadyOneInLab(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1}, nil
+		},
+		SetExperimentRoleGreeterFunc: func(ctx context.Context, arg db.SetExperimentRoleGreeterParams) (db.ExperimentRole, error) {
+			return db.ExperimentRole{}, &pgconn.PgError{Code: pgUniqueViolation}
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-greeter", cookie, setExperimentRoleGreeterRequest{IsGreeterRole: true})
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+// TestHandleSetExperimentRoleGreeter_DeactivatedRole mirrors
+// TestHandleSetExperimentRoleSitter_DeactivatedRole.
+func TestHandleSetExperimentRoleGreeter_DeactivatedRole(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-greeter", cookie, setExperimentRoleGreeterRequest{IsGreeterRole: true})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
+	}
+}
+
+// TestHandleSetExperimentRoleGreeter_UnsetAllowedOnDeactivatedRole mirrors
+// TestHandleSetExperimentRoleSitter_UnsetAllowedOnDeactivatedRole.
+func TestHandleSetExperimentRoleGreeter_UnsetAllowedOnDeactivatedRole(t *testing.T) {
+	q := &dbfake.Querier{
+		GetExperimentRoleByIDFunc: func(ctx context.Context, id int64) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: id, LabID: 1, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+		SetExperimentRoleGreeterFunc: func(ctx context.Context, arg db.SetExperimentRoleGreeterParams) (db.ExperimentRole, error) {
+			return db.ExperimentRole{ID: arg.ID, LabID: 1, IsGreeterRole: false, DeactivatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/3/set-greeter", cookie, setExperimentRoleGreeterRequest{IsGreeterRole: false})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+}
+
+func TestHandleSetExperimentRoleGreeter_InvalidID(t *testing.T) {
+	s, cookie := newAuthenticatedTestServer(&dbfake.Querier{}, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/experiment-roles/not-a-number/set-greeter", cookie, setExperimentRoleGreeterRequest{IsGreeterRole: true})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)

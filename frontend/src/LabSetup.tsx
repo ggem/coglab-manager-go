@@ -32,6 +32,7 @@ import {
   listProtocols,
   listScheduleBlockings,
   listZipCodes,
+  setExperimentRoleGreeter,
   setExperimentRoleSitter,
   updateCondition,
   updateConditionValue,
@@ -196,12 +197,14 @@ export default function LabSetup() {
 }
 
 // Roles gets its own small wrapper rather than an inline LookupTable
-// instantiation: the sitter toggle is a dedicated action
-// (setExperimentRoleSitter), not a regular field edit, and needs its
-// own mutation + error handling alongside LookupTable's standard ones.
+// instantiation: the sitter/greeter toggles are dedicated actions
+// (setExperimentRoleSitter/setExperimentRoleGreeter), not regular field
+// edits, and need their own mutations + error handling alongside
+// LookupTable's standard ones.
 function RolesTable({ labId }: { labId: number }) {
   const queryClient = useQueryClient()
   const [sitterError, setSitterError] = useState<string | null>(null)
+  const [greeterError, setGreeterError] = useState<string | null>(null)
 
   const sitterMutation = useMutation({
     mutationFn: ({ id, isSitterRole }: { id: number; isSitterRole: boolean }) =>
@@ -212,12 +215,26 @@ function RolesTable({ labId }: { labId: number }) {
     },
     onError: (err) => setSitterError(errorMessage(err, 'Failed to set sitter role.')),
   })
+  const greeterMutation = useMutation({
+    mutationFn: ({ id, isGreeterRole }: { id: number; isGreeterRole: boolean }) =>
+      setExperimentRoleGreeter(id, isGreeterRole),
+    onSuccess: () => {
+      setGreeterError(null)
+      void queryClient.invalidateQueries({ queryKey: ['roles', labId] })
+    },
+    onError: (err) => setGreeterError(errorMessage(err, 'Failed to set greeter role.')),
+  })
 
   return (
     <div>
       {sitterError && (
         <p className="error" role="alert">
           {sitterError}
+        </p>
+      )}
+      {greeterError && (
+        <p className="error" role="alert">
+          {greeterError}
         </p>
       )}
       <LookupTable
@@ -228,13 +245,22 @@ function RolesTable({ labId }: { labId: number }) {
         update={(rowId, values) => updateExperimentRole(rowId, values.name)}
         deactivate={(rowId) => deactivateExperimentRole(rowId)}
         extraActions={(role: ExperimentRole) => (
-          <button
-            type="button"
-            onClick={() => sitterMutation.mutate({ id: role.id, isSitterRole: !role.is_sitter_role })}
-            disabled={sitterMutation.isPending}
-          >
-            {role.is_sitter_role ? 'Unset sitter role' : 'Set as sitter role'}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => sitterMutation.mutate({ id: role.id, isSitterRole: !role.is_sitter_role })}
+              disabled={sitterMutation.isPending}
+            >
+              {role.is_sitter_role ? 'Unset sitter role' : 'Set as sitter role'}
+            </button>
+            <button
+              type="button"
+              onClick={() => greeterMutation.mutate({ id: role.id, isGreeterRole: !role.is_greeter_role })}
+              disabled={greeterMutation.isPending}
+            >
+              {role.is_greeter_role ? 'Unset greeter role' : 'Set as greeter role'}
+            </button>
+          </>
         )}
       />
     </div>

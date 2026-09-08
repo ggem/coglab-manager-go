@@ -63,6 +63,13 @@ type Querier interface {
 	DeactivateConditionValue(ctx context.Context, id int64) error
 	DeactivateEquipment(ctx context.Context, id int64) error
 	DeactivateExperiment(ctx context.Context, id int64) error
+	// Also clears is_sitter_role/is_greeter_role: a deactivated role retiring
+	// from the lab's normal training-requirement machinery should retire
+	// from these designations too, rather than leaving a dangling "this
+	// retired role is still the lab's sitter/greeter" state that only a raw
+	// DB query would reveal (GetSitterRoleForLab/GetGreeterRoleForLab below
+	// also filter deactivated_at as defense in depth, but a lab should never
+	// end up needing that filter to matter).
 	DeactivateExperimentRole(ctx context.Context, id int64) error
 	DeactivateExperimentType(ctx context.Context, id int64) error
 	DeactivateGrant(ctx context.Context, id int64) error
@@ -94,6 +101,7 @@ type Querier interface {
 	GetExperimentTypeByID(ctx context.Context, id int64) (ExperimentType, error)
 	GetFamilyByID(ctx context.Context, id int64) (Family, error)
 	GetGrantByID(ctx context.Context, id int64) (Grant, error)
+	GetGreeterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error)
 	GetGuardianByID(ctx context.Context, id int64) (Guardian, error)
 	GetJobLastRun(ctx context.Context, jobName string) (pgtype.Timestamptz, error)
 	GetLabAvailabilityGeneralByID(ctx context.Context, id int64) (LabAvailabilityGeneral, error)
@@ -300,11 +308,26 @@ type Querier interface {
 	// "review a handful of candidates" tool for staff, not a ranked search --
 	// ranking isn't worth the extra query complexity here.
 	SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error)
+	// Mirrors ReleaseAppointment's status guard: only while an appointment
+	// is still unscheduled or scheduled-but-not-yet-arrived does requesting
+	// a dedicated greeter mean anything -- an arrived/released/etc.
+	// appointment's staff assignment is already final (or moot).
+	SetAppointmentWantsGreeter(ctx context.Context, arg SetAppointmentWantsGreeterParams) (Appointment, error)
+	// Mirrors SetExperimentRoleSitter: a dedicated action, not part of
+	// UpdateExperimentRole, with its own constraint (at most one greeter
+	// role per lab, enforced by a partial unique index), the same
+	// deactivated-role guard on setting true, and the same
+	// always-allow-unset behavior.
+	SetExperimentRoleGreeter(ctx context.Context, arg SetExperimentRoleGreeterParams) (ExperimentRole, error)
 	// Dedicated action rather than part of UpdateExperimentRole: designating
 	// the sitter role is a distinct decision from renaming a role. The
 	// partial unique index (at most one sitter role per lab) rejects setting
 	// a second role true while one's already set -- the caller must unset the
-	// old one first, this doesn't swap automatically.
+	// old one first, this doesn't swap automatically. Setting true is
+	// rejected (zero rows) for an already-deactivated role -- the caller
+	// (handleSetExperimentRoleSitter) checks this first for a clean 400
+	// rather than a confusing 404; unsetting (false) is always allowed
+	// regardless of deactivated status, to clean up any stale flag.
 	SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error)
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)

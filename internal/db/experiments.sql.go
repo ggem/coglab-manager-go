@@ -408,7 +408,7 @@ func (q *Queries) ListExperimentPrincipalInvestigators(ctx context.Context, expe
 }
 
 const listExperimentTrainingRequirements = `-- name: ListExperimentTrainingRequirements :many
-select experiment_roles.id, experiment_roles.lab_id, experiment_roles.name, experiment_roles.deactivated_at, experiment_roles.created_at, experiment_roles.updated_at, experiment_roles.is_sitter_role from experiment_roles
+select experiment_roles.id, experiment_roles.lab_id, experiment_roles.name, experiment_roles.deactivated_at, experiment_roles.created_at, experiment_roles.updated_at, experiment_roles.is_sitter_role, experiment_roles.is_greeter_role from experiment_roles
 join experiment_training_requirements
     on experiment_training_requirements.experiment_role_id = experiment_roles.id
 where experiment_training_requirements.experiment_id = $1
@@ -432,6 +432,7 @@ func (q *Queries) ListExperimentTrainingRequirements(ctx context.Context, experi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.IsSitterRole,
+			&i.IsGreeterRole,
 		); err != nil {
 			return nil, err
 		}

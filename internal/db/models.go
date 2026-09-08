@@ -11,24 +11,25 @@ import (
 )
 
 type Appointment struct {
-	ID                int64              `json:"id"`
-	ExperimentID      int64              `json:"experiment_id"`
-	ChildID           int64              `json:"child_id"`
-	Session           int16              `json:"session"`
-	AgeRangeMinMonths pgtype.Numeric     `json:"age_range_min_months"`
-	AgeRangeMaxMonths pgtype.Numeric     `json:"age_range_max_months"`
-	SiblingComing     string             `json:"sibling_coming"`
-	ScheduleDate      pgtype.Date        `json:"schedule_date"`
-	ScheduleTimeStart pgtype.Time        `json:"schedule_time_start"`
-	ScheduleTimeEnd   pgtype.Time        `json:"schedule_time_end"`
-	Status            string             `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	ReminderSentAt    pgtype.Timestamptz `json:"reminder_sent_at"`
-	DataStatus        string             `json:"data_status"`
-	TypeOfCar         string             `json:"type_of_car"`
-	ParticipantNumber string             `json:"participant_number"`
-	TokenID           *int64             `json:"token_id"`
+	ID                    int64              `json:"id"`
+	ExperimentID          int64              `json:"experiment_id"`
+	ChildID               int64              `json:"child_id"`
+	Session               int16              `json:"session"`
+	AgeRangeMinMonths     pgtype.Numeric     `json:"age_range_min_months"`
+	AgeRangeMaxMonths     pgtype.Numeric     `json:"age_range_max_months"`
+	SiblingComing         string             `json:"sibling_coming"`
+	ScheduleDate          pgtype.Date        `json:"schedule_date"`
+	ScheduleTimeStart     pgtype.Time        `json:"schedule_time_start"`
+	ScheduleTimeEnd       pgtype.Time        `json:"schedule_time_end"`
+	Status                string             `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ReminderSentAt        pgtype.Timestamptz `json:"reminder_sent_at"`
+	DataStatus            string             `json:"data_status"`
+	TypeOfCar             string             `json:"type_of_car"`
+	ParticipantNumber     string             `json:"participant_number"`
+	TokenID               *int64             `json:"token_id"`
+	WantsDedicatedGreeter bool               `json:"wants_dedicated_greeter"`
 }
 
 type AppointmentExperimenter struct {
@@ -169,6 +170,7 @@ type ExperimentRole struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	IsSitterRole  bool               `json:"is_sitter_role"`
+	IsGreeterRole bool               `json:"is_greeter_role"`
 }
 
 type ExperimentTrainingRequirement struct {
