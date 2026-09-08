@@ -25,6 +25,7 @@ import {
   type GuardianInput,
   type RecruitmentSource,
 } from './api'
+import { EDUCATION_OPTIONS } from './participantOptions'
 
 const CONTACT_METHODS = [
   { value: 'home_phone', label: 'Home phone' },
@@ -35,14 +36,6 @@ const CONTACT_METHODS = [
   { value: 'snail_mail', label: 'Mail' },
 ]
 
-const EDUCATION_OPTIONS = [
-  { value: 'unknown', label: 'Unknown' },
-  { value: 'without_high_school_diploma', label: 'Without high school diploma' },
-  { value: 'hs_grad_no_college', label: 'High school graduate, no college' },
-  { value: 'hs_grad_some_college', label: 'High school graduate, some college' },
-  { value: 'degree_from_4yr_college_or_higher', label: '4-year degree or higher' },
-  { value: 'left_blank', label: 'Left blank' },
-]
 
 const PHONE_TYPE_OPTIONS = [
   { value: 'home', label: 'Home' },

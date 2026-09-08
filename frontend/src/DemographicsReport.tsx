@@ -1,6 +1,17 @@
 import { useState, type SubmitEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { errorMessage, getDemographicsReport } from './api'
+import { EDUCATION_OPTIONS, RACE_ETHNICITY_OPTIONS, SEX_OPTIONS } from './participantOptions'
+
+// Reuses the same option lists ChildForm/FamilyDetail edit against, so
+// this report shows the same labels as the rest of the app instead of
+// raw stored values (e.g. "hispanic_or_latino", "degree_from_4yr_college_or_higher").
+function labelMap(options: { value: string; label: string }[]): Record<string, string> {
+  return Object.fromEntries(options.map((o) => [o.value, o.label]))
+}
+const SEX_LABELS = labelMap(SEX_OPTIONS)
+const RACE_ETHNICITY_LABELS = labelMap(RACE_ETHNICITY_OPTIONS)
+const EDUCATION_LABELS = labelMap(EDUCATION_OPTIONS)
 
 export default function DemographicsReport({ experimentId }: { experimentId: number }) {
   const [startDate, setStartDate] = useState('')
@@ -53,18 +64,21 @@ export default function DemographicsReport({ experimentId }: { experimentId: num
               ` -- age ${report.summary.age_months_min.toFixed(1)}-${report.summary.age_months_max.toFixed(1)} months (avg ${report.summary.age_months_avg.toFixed(1)})`}
           </p>
           <p>
-            By sex: {Object.entries(report.summary.by_sex).map(([k, v]) => `${k}: ${v}`).join(', ') || '—'}
+            By sex:{' '}
+            {Object.entries(report.summary.by_sex)
+              .map(([k, v]) => `${SEX_LABELS[k] ?? k}: ${v}`)
+              .join(', ') || '—'}
           </p>
           <p>
             By race/ethnicity:{' '}
             {Object.entries(report.summary.by_race_ethnicity)
-              .map(([k, v]) => `${k}: ${v}`)
+              .map(([k, v]) => `${RACE_ETHNICITY_LABELS[k] ?? k}: ${v}`)
               .join(', ') || '—'}
           </p>
           <p>
             By guardian education:{' '}
             {Object.entries(report.summary.by_guardian_education)
-              .map(([k, v]) => `${k}: ${v}`)
+              .map(([k, v]) => `${EDUCATION_LABELS[k] ?? k}: ${v}`)
               .join(', ') || '—'}
           </p>
           <table>
@@ -85,11 +99,11 @@ export default function DemographicsReport({ experimentId }: { experimentId: num
                   <td>
                     {c.first_name} {c.last_name}
                   </td>
-                  <td>{c.sex}</td>
-                  <td>{c.race_ethnicity.join(', ')}</td>
+                  <td>{SEX_LABELS[c.sex] ?? c.sex}</td>
+                  <td>{c.race_ethnicity.map((r) => RACE_ETHNICITY_LABELS[r] ?? r).join(', ')}</td>
                   <td>{c.schedule_date}</td>
                   <td>{c.age_months.toFixed(1)}</td>
-                  <td>{c.guardian_education}</td>
+                  <td>{EDUCATION_LABELS[c.guardian_education] ?? c.guardian_education}</td>
                 </tr>
               ))}
             </tbody>

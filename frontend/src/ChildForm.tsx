@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react'
 import type { Child, ChildInput, RecruitmentSource } from './api'
+import { RACE_ETHNICITY_OPTIONS, SEX_OPTIONS } from './participantOptions'
 
 // The ~15-field child form, shared by creation (a fresh row below the
 // children table) and editing (an existing child's expanded row) --
@@ -127,27 +128,10 @@ function toChildInput(v: Values): ChildInput {
   }
 }
 
-const SEX_OPTIONS = [
-  { value: 'unknown', label: 'Unknown' },
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-]
 const TRI_OPTIONS = [
   { value: 'unknown', label: 'Unknown' },
   { value: 'yes', label: 'Yes' },
   { value: 'no', label: 'No' },
-]
-// Matches the children.race_ethnicity CHECK constraint exactly -- a
-// fixed set, not free text, and multivalued (a child can be more than
-// one), hence checkboxes rather than a single <select>.
-const RACE_ETHNICITY_OPTIONS = [
-  { value: 'american_indian_or_alaska_native', label: 'American Indian or Alaska Native' },
-  { value: 'asian', label: 'Asian' },
-  { value: 'black_or_african_american', label: 'Black or African American' },
-  { value: 'hispanic_or_latino', label: 'Hispanic or Latino' },
-  { value: 'middle_eastern_or_north_african', label: 'Middle Eastern or North African' },
-  { value: 'native_hawaiian_or_pacific_islander', label: 'Native Hawaiian or Pacific Islander' },
-  { value: 'white', label: 'White' },
 ]
 // Matches the children.response CHECK constraint exactly.
 const RESPONSE_OPTIONS = [
