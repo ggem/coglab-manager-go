@@ -16,5 +16,18 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local dev/test OIDC provider for the SSO login flow -- see
+  # dex/config.yaml for the static test client and user this ships with.
+  # Not part of any production deployment (a real institutional IdP is
+  # configured there via OIDC_* env vars instead).
+  dex:
+    image: dexidp/dex:v2.41.1
+    restart: unless-stopped
+    ports:
+      - "${DEX_PORT:-5556}:5556"
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+
 volumes:
   pgdata:

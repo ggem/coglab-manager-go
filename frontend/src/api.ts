@@ -87,6 +87,16 @@ export function getMe(): Promise<LoginResponse> {
   return apiFetch<LoginResponse>('/me')
 }
 
+export interface SSOConfig {
+  enabled: boolean
+}
+
+// Lets the login page show (or hide) "Sign in with SSO" without guessing
+// from a 404 -- most deployments have no institutional IdP configured yet.
+export function getSSOConfig(): Promise<SSOConfig> {
+  return apiFetch<SSOConfig>('/auth/sso/config')
+}
+
 export interface ChildSearchResult {
   id: number
   family_id: number

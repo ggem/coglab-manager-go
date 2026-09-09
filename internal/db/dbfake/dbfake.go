@@ -19,6 +19,8 @@ type Querier struct {
 	CreateUserFunc            func(ctx context.Context, arg db.CreateUserParams) (db.User, error)
 	GetUserByEmailFunc        func(ctx context.Context, email string) (db.User, error)
 	GetUserByIDFunc           func(ctx context.Context, id int64) (db.User, error)
+	GetUserBySSOIdentityFunc  func(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error)
+	SetUserSSOIdentityFunc    func(ctx context.Context, arg db.SetUserSSOIdentityParams) error
 	CreateSessionFunc         func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error)
 	GetSessionByTokenHashFunc func(ctx context.Context, tokenHash []byte) (db.Session, error)
 	RevokeSessionFunc         func(ctx context.Context, tokenHash []byte) error
@@ -220,6 +222,20 @@ func (q *Querier) GetUserByID(ctx context.Context, id int64) (db.User, error) {
 		panic("dbfake: GetUserByID not implemented")
 	}
 	return q.GetUserByIDFunc(ctx, id)
+}
+
+func (q *Querier) GetUserBySSOIdentity(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error) {
+	if q.GetUserBySSOIdentityFunc == nil {
+		panic("dbfake: GetUserBySSOIdentity not implemented")
+	}
+	return q.GetUserBySSOIdentityFunc(ctx, arg)
+}
+
+func (q *Querier) SetUserSSOIdentity(ctx context.Context, arg db.SetUserSSOIdentityParams) error {
+	if q.SetUserSSOIdentityFunc == nil {
+		panic("dbfake: SetUserSSOIdentity not implemented")
+	}
+	return q.SetUserSSOIdentityFunc(ctx, arg)
 }
 
 func (q *Querier) CreateSession(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {

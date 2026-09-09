@@ -364,6 +364,8 @@ type User struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	DeactivatedAt   pgtype.Timestamptz `json:"deactivated_at"`
+	SsoIssuer       *string            `json:"sso_issuer"`
+	SsoSubject      *string            `json:"sso_subject"`
 }
 
 type Zipcode struct {

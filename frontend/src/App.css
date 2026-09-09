@@ -48,6 +48,12 @@ input:focus-visible {
   background: #999;
 }
 
+.sso-login-link {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
 .app {
   max-width: 1100px;
   margin: 0 auto;

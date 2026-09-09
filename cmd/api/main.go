@@ -59,6 +59,12 @@ func run() error {
 	}
 
 	queries := db.New(pool)
+
+	oidcAuthenticator, err := newOIDCAuthenticator(ctx, queries)
+	if err != nil {
+		return err
+	}
+
 	server := httpapi.NewServer(
 		auth.NewPasswordAuthenticator(queries),
 		auth.NewSessionManager(queries, secureCookies()),
@@ -67,6 +73,7 @@ func run() error {
 		pool,
 		mcdiClient,
 		logger,
+		oidcAuthenticator,
 	)
 
 	srv := &http.Server{
@@ -149,6 +156,30 @@ func newMailer() (mail.Sender, error) {
 // optional: the current cdibase tool's "cdi_type" is mcdi.NewAPIClient's
 // own default, so this only needs setting for a still-live older
 // daxlabbase instance expecting the pre-rename "mcdi_type".
+// newOIDCAuthenticator wires up SSO, if configured. Unlike newMCDIClient
+// (always required), OIDC_* is optional -- most deployments start with no
+// institutional IdP registered yet, and local password login must keep
+// working regardless. But it's all-or-nothing: a partially-set
+// configuration (e.g. an issuer URL with no client secret) fails fast at
+// startup rather than silently running with SSO half-broken.
+func newOIDCAuthenticator(ctx context.Context, queries db.Querier) (*auth.OIDCAuthenticator, error) {
+	cfg := auth.OIDCConfig{
+		IssuerURL:    os.Getenv("OIDC_ISSUER_URL"),
+		ClientID:     os.Getenv("OIDC_CLIENT_ID"),
+		ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
+	}
+	set := cfg.IssuerURL != "" || cfg.ClientID != "" || cfg.ClientSecret != "" || cfg.RedirectURL != ""
+	complete := cfg.IssuerURL != "" && cfg.ClientID != "" && cfg.ClientSecret != "" && cfg.RedirectURL != ""
+	if !set {
+		return nil, nil
+	}
+	if !complete {
+		return nil, fmt.Errorf("OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URL must all be set together, or none at all")
+	}
+	return auth.NewOIDCAuthenticator(ctx, cfg, queries)
+}
+
 func newMCDIClient() (mcdi.Client, error) {
 	apiURL := os.Getenv("MCDI_API_URL")
 	if apiURL == "" {

@@ -92,7 +92,7 @@ func (q *Queries) IsLabAdmin(ctx context.Context, arg IsLabAdminParams) (bool, e
 }
 
 const listLabMembers = `-- name: ListLabMembers :many
-select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject from users
 join lab_memberships on lab_memberships.user_id = users.id
 where lab_memberships.lab_id = $1
   and users.deactivated_at is null
@@ -121,6 +121,8 @@ func (q *Queries) ListLabMembers(ctx context.Context, labID int64) ([]User, erro
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
 		); err != nil {
 			return nil, err
 		}
@@ -275,7 +277,7 @@ func (q *Queries) RemoveLabMembership(ctx context.Context, arg RemoveLabMembersh
 }
 
 const searchUsersNotInLab = `-- name: SearchUsersNotInLab :many
-select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject
 from users
 where
     ($1::text is null
@@ -318,6 +320,8 @@ func (q *Queries) SearchUsersNotInLab(ctx context.Context, arg SearchUsersNotInL
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
 		); err != nil {
 			return nil, err
 		}

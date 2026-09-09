@@ -25,7 +25,7 @@ func (q *Queries) AddLabMemberTraining(ctx context.Context, arg AddLabMemberTrai
 }
 
 const listLabMemberTrainingsForRole = `-- name: ListLabMemberTrainingsForRole :many
-select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject from users
 join lab_member_trainings on lab_member_trainings.user_id = users.id
 where lab_member_trainings.experiment_role_id = $1
   and users.deactivated_at is null
@@ -53,6 +53,8 @@ func (q *Queries) ListLabMemberTrainingsForRole(ctx context.Context, experimentR
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
 		); err != nil {
 			return nil, err
 		}
@@ -65,7 +67,7 @@ func (q *Queries) ListLabMemberTrainingsForRole(ctx context.Context, experimentR
 }
 
 const listLabMemberTrainingsForRoleByPriority = `-- name: ListLabMemberTrainingsForRoleByPriority :many
-select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject from users
 join lab_member_trainings on lab_member_trainings.user_id = users.id
 left join lab_memberships
     on lab_memberships.user_id = users.id
@@ -119,6 +121,8 @@ func (q *Queries) ListLabMemberTrainingsForRoleByPriority(ctx context.Context, a
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
 		); err != nil {
 			return nil, err
 		}

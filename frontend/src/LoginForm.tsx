@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { login, errorMessage, type User } from './api'
+import { useEffect, useState, type FormEvent } from 'react'
+import { getSSOConfig, login, errorMessage, type User } from './api'
 
 interface Props {
   onLogin: (user: User) => void
@@ -8,8 +8,17 @@ interface Props {
 export default function LoginForm({ onLogin }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('sso_error') === '1' ? 'login failed' : null,
+  )
   const [submitting, setSubmitting] = useState(false)
+  const [ssoEnabled, setSSOEnabled] = useState(false)
+
+  useEffect(() => {
+    getSSOConfig()
+      .then((config) => setSSOEnabled(config.enabled))
+      .catch(() => setSSOEnabled(false))
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -54,6 +63,11 @@ export default function LoginForm({ onLogin }: Props) {
       <button type="submit" disabled={submitting}>
         {submitting ? 'Signing in…' : 'Sign in'}
       </button>
+      {ssoEnabled && (
+        <a className="sso-login-link" href="/auth/sso/login">
+          Sign in with SSO
+        </a>
+      )}
     </form>
   )
 }

@@ -50,6 +50,15 @@ func NewSessionManager(queries db.Querier, secureCookies bool) *SessionManager {
 	return &SessionManager{queries: queries, secureCookies: secureCookies}
 }
 
+// SecureCookies reports the Secure-flag setting this manager was
+// constructed with -- exposed so other cookies this package doesn't own
+// (the SSO state/nonce cookies in httpapi's sso_handlers.go) can match it,
+// rather than threading the same startup config value through a second
+// path.
+func (m *SessionManager) SecureCookies() bool {
+	return m.secureCookies
+}
+
 // Issue creates a new session for userID and sets the session cookie on w.
 func (m *SessionManager) Issue(ctx context.Context, w http.ResponseWriter, r *http.Request, userID int64) error {
 	token, tokenHash, err := generateToken()

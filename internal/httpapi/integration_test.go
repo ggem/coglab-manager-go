@@ -76,7 +76,7 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -167,7 +167,7 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -401,7 +401,7 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -661,7 +661,7 @@ func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership(undergrad): %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -818,7 +818,7 @@ func TestSchedulingFlow_DedicatedGreeter_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1018,7 +1018,7 @@ func TestDeactivateExperimentRole_ClearsSitterAndGreeterRoles_Integration(t *tes
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1175,7 +1175,7 @@ func TestLabMembershipsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert experiment_role: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1389,7 +1389,7 @@ func TestLabMembershipsFlow_RequiresAdmin_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership(other): %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1517,7 +1517,7 @@ func TestMatchingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1728,7 +1728,7 @@ func TestReportingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1927,7 +1927,7 @@ func TestNewsletterExportFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -2299,7 +2299,7 @@ func TestRequestMCDIFlow_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -2374,7 +2374,7 @@ func TestRequestMCDIFlow_NoGuardianEmail_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger())
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil)
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {

@@ -10,15 +10,17 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-insert into users (email, first_name, last_name, password_hash, is_platform_admin)
+insert into users (email, first_name, last_name, password_hash, is_platform_admin, sso_issuer, sso_subject)
 values (
     lower($1),
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6,
+    $7
 )
-returning id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at
+returning id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject
 `
 
 type CreateUserParams struct {
@@ -27,6 +29,8 @@ type CreateUserParams struct {
 	LastName        string  `json:"last_name"`
 	PasswordHash    *string `json:"password_hash"`
 	IsPlatformAdmin bool    `json:"is_platform_admin"`
+	SsoIssuer       *string `json:"sso_issuer"`
+	SsoSubject      *string `json:"sso_subject"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -36,6 +40,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.LastName,
 		arg.PasswordHash,
 		arg.IsPlatformAdmin,
+		arg.SsoIssuer,
+		arg.SsoSubject,
 	)
 	var i User
 	err := row.Scan(
@@ -48,12 +54,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at from users where lower(email) = lower($1)
+select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject from users where lower(email) = lower($1)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -69,12 +77,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at from users where id = $1
+select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject from users where id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -90,6 +100,54 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
 	)
 	return i, err
+}
+
+const getUserBySSOIdentity = `-- name: GetUserBySSOIdentity :one
+select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject from users where sso_issuer = $1 and sso_subject = $2
+`
+
+type GetUserBySSOIdentityParams struct {
+	SsoIssuer  *string `json:"sso_issuer"`
+	SsoSubject *string `json:"sso_subject"`
+}
+
+func (q *Queries) GetUserBySSOIdentity(ctx context.Context, arg GetUserBySSOIdentityParams) (User, error) {
+	row := q.db.QueryRow(ctx, getUserBySSOIdentity, arg.SsoIssuer, arg.SsoSubject)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.PasswordHash,
+		&i.IsPlatformAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
+	)
+	return i, err
+}
+
+const setUserSSOIdentity = `-- name: SetUserSSOIdentity :exec
+update users set sso_issuer = $1, sso_subject = $2 where id = $3
+`
+
+type SetUserSSOIdentityParams struct {
+	SsoIssuer  *string `json:"sso_issuer"`
+	SsoSubject *string `json:"sso_subject"`
+	ID         int64   `json:"id"`
+}
+
+// Backfills the link the first time an existing local-password account
+// signs in via SSO -- matched by email at that point, not (issuer, sub)
+// (which didn't exist on the row yet).
+func (q *Queries) SetUserSSOIdentity(ctx context.Context, arg SetUserSSOIdentityParams) error {
+	_, err := q.db.Exec(ctx, setUserSSOIdentity, arg.SsoIssuer, arg.SsoSubject, arg.ID)
+	return err
 }

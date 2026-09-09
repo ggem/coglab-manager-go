@@ -370,7 +370,7 @@ func (q *Queries) ListExperimentGrants(ctx context.Context, experimentID int64) 
 }
 
 const listExperimentPrincipalInvestigators = `-- name: ListExperimentPrincipalInvestigators :many
-select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at from users
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject from users
 join experiment_principal_investigators
     on experiment_principal_investigators.user_id = users.id
 where experiment_principal_investigators.experiment_id = $1
@@ -396,6 +396,8 @@ func (q *Queries) ListExperimentPrincipalInvestigators(ctx context.Context, expe
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
 		); err != nil {
 			return nil, err
 		}

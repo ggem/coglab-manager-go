@@ -22,14 +22,20 @@ import (
 
 // Server holds the dependencies HTTP handlers need. authenticator and
 // mcdiClient are typed as interfaces, since each is a dependency here a
-// caller might plausibly want to substitute (a test double, or -- for
-// authenticator -- a future SSO authenticator); sessions and audit are
+// caller might plausibly want to substitute (a test double, or --
+// previously -- a future SSO authenticator); sessions and audit are
 // concrete types because *auth.SessionManager and *audit.Recorder are
 // each the only real implementation and aren't swapped out. queries is
 // used directly by handlers with no business logic beyond CRUD
 // (families, guardians, ...); if that logic grows past what a handler
 // should own, it gets its own domain package the way auth and audit
 // already have.
+//
+// oidc is nil when SSO isn't configured for this deployment (the normal
+// case until a specific institution's IdP is registered): local
+// email/password login keeps working either way, and Routes only
+// registers the /auth/sso/* endpoints when oidc is non-nil, rather than
+// registering them unconditionally and having them fail at request time.
 type Server struct {
 	authenticator auth.LocalAuthenticator
 	sessions      *auth.SessionManager
@@ -38,6 +44,7 @@ type Server struct {
 	beginner      txBeginner
 	mcdiClient    mcdi.Client
 	logger        *slog.Logger
+	oidc          auth.SSOAuthenticator
 }
 
 // txBeginner is satisfied by *pgxpool.Pool (wired in cmd/api/main.go) and
@@ -51,7 +58,7 @@ type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, beginner txBeginner, mcdiClient mcdi.Client, logger *slog.Logger) *Server {
+func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, beginner txBeginner, mcdiClient mcdi.Client, logger *slog.Logger, oidc auth.SSOAuthenticator) *Server {
 	return &Server{
 		authenticator: authenticator,
 		sessions:      sessions,
@@ -60,6 +67,7 @@ func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionMana
 		beginner:      beginner,
 		mcdiClient:    mcdiClient,
 		logger:        logger,
+		oidc:          oidc,
 	}
 }
 
@@ -87,6 +95,15 @@ func (s *Server) Routes() http.Handler {
 
 	r.Get("/healthz", s.handleHealthz)
 	r.Post("/login", s.handleLogin)
+	r.Get("/auth/sso/config", s.handleSSOConfig)
+	// Only registered when SSO is actually configured (s.oidc != nil) --
+	// see Server's doc comment. A deployment with no institutional IdP
+	// set up yet has no /auth/sso/login or /auth/sso/callback at all,
+	// rather than routes that exist but always fail.
+	if s.oidc != nil {
+		r.Get("/auth/sso/login", s.handleSSOLogin)
+		r.Get("/auth/sso/callback", s.handleSSOCallback)
+	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.requireAuth)

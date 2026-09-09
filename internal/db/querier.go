@@ -120,6 +120,7 @@ type Querier interface {
 	GetSitterRoleForLab(ctx context.Context, labID int64) (ExperimentRole, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	GetUserBySSOIdentity(ctx context.Context, arg GetUserBySSOIdentityParams) (User, error)
 	GetZipCodeByID(ctx context.Context, id int64) (Zipcode, error)
 	// Distinct-child 'arrived' counts per protocol in a date range, for the
 	// lab's Human Research Committee (IRB) reporting.
@@ -377,6 +378,10 @@ type Querier interface {
 	// rather than a confusing 404; unsetting (false) is always allowed
 	// regardless of deactivated status, to clean up any stale flag.
 	SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error)
+	// Backfills the link the first time an existing local-password account
+	// signs in via SSO -- matched by email at that point, not (issuer, sub)
+	// (which didn't exist on the row yet).
+	SetUserSSOIdentity(ctx context.Context, arg SetUserSSOIdentityParams) error
 	TouchSessionLastSeen(ctx context.Context, id int64) error
 	UpdateChild(ctx context.Context, arg UpdateChildParams) (Child, error)
 	UpdateCondition(ctx context.Context, arg UpdateConditionParams) (Condition, error)
