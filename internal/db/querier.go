@@ -245,6 +245,10 @@ type Querier interface {
 	// audit event's actor (who might be an admin scheduling on someone
 	// else's behalf).
 	ListRecipientsForAppointments(ctx context.Context, appointmentIds []int64) ([]ListRecipientsForAppointmentsRow, error)
+	// The fixed, small set of permission-level roles (staff/coordinator/
+	// admin) a lab membership can be assigned -- not lab-scoped, and not
+	// editable from the lab-members admin page (see lab_memberships.sql).
+	ListRoles(ctx context.Context) ([]Role, error)
 	ListScheduleBlockingsByLab(ctx context.Context, labID int64) ([]ScheduleBlocking, error)
 	// One query for a whole multi-day search range, rather than one call per
 	// candidate day -- the caller groups rows by date in Go.

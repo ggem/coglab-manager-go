@@ -30,6 +30,7 @@ const apiPaths = [
   '/grants',
   '/zip-codes',
   '/newsletters',
+  '/roles',
 ]
 
 // https://vite.dev/config/

@@ -94,6 +94,7 @@ func (s *Server) Routes() http.Handler {
 		r.Post("/logout", s.handleLogout)
 		r.Get("/me", s.handleMe)
 		r.Get("/labs", s.handleListMyLabs)
+		r.Get("/roles", s.handleListRoles)
 
 		r.Route("/recruitment-sources", func(r chi.Router) {
 			r.Post("/", s.handleCreateRecruitmentSource)

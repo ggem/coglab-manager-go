@@ -132,6 +132,7 @@ type Querier struct {
 	GetLabMembershipFunc func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
 	ListLabsForUserFunc  func(ctx context.Context, userID int64) ([]db.Lab, error)
 	ListLabMembersFunc   func(ctx context.Context, labID int64) ([]db.User, error)
+	ListRolesFunc        func(ctx context.Context) ([]db.Role, error)
 
 	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
 	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
@@ -793,6 +794,13 @@ func (q *Querier) ListLabMembers(ctx context.Context, labID int64) ([]db.User, e
 		panic("dbfake: ListLabMembers not implemented")
 	}
 	return q.ListLabMembersFunc(ctx, labID)
+}
+
+func (q *Querier) ListRoles(ctx context.Context) ([]db.Role, error) {
+	if q.ListRolesFunc == nil {
+		panic("dbfake: ListRoles not implemented")
+	}
+	return q.ListRolesFunc(ctx)
 }
 
 func (q *Querier) ListConditionsByLab(ctx context.Context, labID int64) ([]db.Condition, error) {
