@@ -46,7 +46,14 @@ order by
     users.id;
 
 -- name: ListLabMemberTrainingsForUser :many
+-- Scoped to one lab: a user's trainings for OTHER labs aren't that
+-- lab's business, and the lab-members admin page (the only caller) only
+-- ever wants "what is this member trained for here". The handler also
+-- confirms {userID} is actually a member of {labID} before calling this
+-- -- otherwise a member of lab A could request another lab's member's
+-- trainings just by naming their user id.
 select experiment_roles.* from experiment_roles
 join lab_member_trainings on lab_member_trainings.experiment_role_id = experiment_roles.id
 where lab_member_trainings.user_id = sqlc.arg(user_id)
+  and experiment_roles.lab_id = sqlc.arg(lab_id)
 order by experiment_roles.id;

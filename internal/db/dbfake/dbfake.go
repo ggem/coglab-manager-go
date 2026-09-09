@@ -129,10 +129,17 @@ type Querier struct {
 	UpdateConditionValueFunc           func(ctx context.Context, arg db.UpdateConditionValueParams) (db.ConditionValue, error)
 	DeactivateConditionValueFunc       func(ctx context.Context, id int64) error
 
-	GetLabMembershipFunc func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
-	ListLabsForUserFunc  func(ctx context.Context, userID int64) ([]db.Lab, error)
-	ListLabMembersFunc   func(ctx context.Context, labID int64) ([]db.User, error)
-	ListRolesFunc        func(ctx context.Context) ([]db.Role, error)
+	GetLabMembershipFunc                     func(ctx context.Context, arg db.GetLabMembershipParams) (db.LabMembership, error)
+	ListLabsForUserFunc                      func(ctx context.Context, userID int64) ([]db.Lab, error)
+	ListLabMembersFunc                       func(ctx context.Context, labID int64) ([]db.User, error)
+	ListLabMembershipsForLabFunc             func(ctx context.Context, labID int64) ([]db.ListLabMembershipsForLabRow, error)
+	CreateLabMembershipFunc                  func(ctx context.Context, arg db.CreateLabMembershipParams) (db.LabMembership, error)
+	UpdateLabMembershipFunc                  func(ctx context.Context, arg db.UpdateLabMembershipParams) (db.LabMembership, error)
+	RemoveLabMembershipFunc                  func(ctx context.Context, arg db.RemoveLabMembershipParams) (db.LabMembership, error)
+	RemoveLabMemberTrainingsForUserInLabFunc func(ctx context.Context, arg db.RemoveLabMemberTrainingsForUserInLabParams) error
+	IsLabAdminFunc                           func(ctx context.Context, arg db.IsLabAdminParams) (bool, error)
+	SearchUsersNotInLabFunc                  func(ctx context.Context, arg db.SearchUsersNotInLabParams) ([]db.User, error)
+	ListRolesFunc                            func(ctx context.Context) ([]db.Role, error)
 
 	CreateEquipmentFunc     func(ctx context.Context, arg db.CreateEquipmentParams) (db.Equipment, error)
 	GetEquipmentByIDFunc    func(ctx context.Context, id int64) (db.Equipment, error)
@@ -154,7 +161,7 @@ type Querier struct {
 	RemoveLabMemberTrainingFunc                 func(ctx context.Context, arg db.RemoveLabMemberTrainingParams) error
 	ListLabMemberTrainingsForRoleFunc           func(ctx context.Context, experimentRoleID int64) ([]db.User, error)
 	ListLabMemberTrainingsForRoleByPriorityFunc func(ctx context.Context, arg db.ListLabMemberTrainingsForRoleByPriorityParams) ([]db.User, error)
-	ListLabMemberTrainingsForUserFunc           func(ctx context.Context, userID int64) ([]db.ExperimentRole, error)
+	ListLabMemberTrainingsForUserFunc           func(ctx context.Context, arg db.ListLabMemberTrainingsForUserParams) ([]db.ExperimentRole, error)
 
 	CreateLabAvailabilityGeneralFunc     func(ctx context.Context, arg db.CreateLabAvailabilityGeneralParams) (db.LabAvailabilityGeneral, error)
 	GetLabAvailabilityGeneralByIDFunc    func(ctx context.Context, id int64) (db.LabAvailabilityGeneral, error)
@@ -796,6 +803,55 @@ func (q *Querier) ListLabMembers(ctx context.Context, labID int64) ([]db.User, e
 	return q.ListLabMembersFunc(ctx, labID)
 }
 
+func (q *Querier) ListLabMembershipsForLab(ctx context.Context, labID int64) ([]db.ListLabMembershipsForLabRow, error) {
+	if q.ListLabMembershipsForLabFunc == nil {
+		panic("dbfake: ListLabMembershipsForLab not implemented")
+	}
+	return q.ListLabMembershipsForLabFunc(ctx, labID)
+}
+
+func (q *Querier) CreateLabMembership(ctx context.Context, arg db.CreateLabMembershipParams) (db.LabMembership, error) {
+	if q.CreateLabMembershipFunc == nil {
+		panic("dbfake: CreateLabMembership not implemented")
+	}
+	return q.CreateLabMembershipFunc(ctx, arg)
+}
+
+func (q *Querier) UpdateLabMembership(ctx context.Context, arg db.UpdateLabMembershipParams) (db.LabMembership, error) {
+	if q.UpdateLabMembershipFunc == nil {
+		panic("dbfake: UpdateLabMembership not implemented")
+	}
+	return q.UpdateLabMembershipFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveLabMembership(ctx context.Context, arg db.RemoveLabMembershipParams) (db.LabMembership, error) {
+	if q.RemoveLabMembershipFunc == nil {
+		panic("dbfake: RemoveLabMembership not implemented")
+	}
+	return q.RemoveLabMembershipFunc(ctx, arg)
+}
+
+func (q *Querier) RemoveLabMemberTrainingsForUserInLab(ctx context.Context, arg db.RemoveLabMemberTrainingsForUserInLabParams) error {
+	if q.RemoveLabMemberTrainingsForUserInLabFunc == nil {
+		panic("dbfake: RemoveLabMemberTrainingsForUserInLab not implemented")
+	}
+	return q.RemoveLabMemberTrainingsForUserInLabFunc(ctx, arg)
+}
+
+func (q *Querier) IsLabAdmin(ctx context.Context, arg db.IsLabAdminParams) (bool, error) {
+	if q.IsLabAdminFunc == nil {
+		panic("dbfake: IsLabAdmin not implemented")
+	}
+	return q.IsLabAdminFunc(ctx, arg)
+}
+
+func (q *Querier) SearchUsersNotInLab(ctx context.Context, arg db.SearchUsersNotInLabParams) ([]db.User, error) {
+	if q.SearchUsersNotInLabFunc == nil {
+		panic("dbfake: SearchUsersNotInLab not implemented")
+	}
+	return q.SearchUsersNotInLabFunc(ctx, arg)
+}
+
 func (q *Querier) ListRoles(ctx context.Context) ([]db.Role, error) {
 	if q.ListRolesFunc == nil {
 		panic("dbfake: ListRoles not implemented")
@@ -978,11 +1034,11 @@ func (q *Querier) ListLabMemberTrainingsForRoleByPriority(ctx context.Context, a
 	return q.ListLabMemberTrainingsForRoleByPriorityFunc(ctx, arg)
 }
 
-func (q *Querier) ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]db.ExperimentRole, error) {
+func (q *Querier) ListLabMemberTrainingsForUser(ctx context.Context, arg db.ListLabMemberTrainingsForUserParams) ([]db.ExperimentRole, error) {
 	if q.ListLabMemberTrainingsForUserFunc == nil {
 		panic("dbfake: ListLabMemberTrainingsForUser not implemented")
 	}
-	return q.ListLabMemberTrainingsForUserFunc(ctx, userID)
+	return q.ListLabMemberTrainingsForUserFunc(ctx, arg)
 }
 
 func (q *Querier) CreateLabAvailabilityGeneral(ctx context.Context, arg db.CreateLabAvailabilityGeneralParams) (db.LabAvailabilityGeneral, error) {

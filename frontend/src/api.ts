@@ -538,6 +538,79 @@ export function getLabMembers(labId: number): Promise<LabMember[]> {
   return apiFetch<LabMember[]>(`/labs/${labId}/members`)
 }
 
+// The lab-members admin page's roster -- membership details
+// (permission role, scheduling priority), not just the bare LabMember
+// rows above.
+export interface LabMembership {
+  user_id: number
+  first_name: string
+  last_name: string
+  email: string
+  role_id: number
+  role_name: string
+  priority: string
+}
+
+export function listLabMemberships(labId: number): Promise<LabMembership[]> {
+  return apiFetch<LabMembership[]>(`/labs/${labId}/memberships/`)
+}
+export function createLabMembership(labId: number, userId: number, roleId: number): Promise<void> {
+  return apiFetch<void>(`/labs/${labId}/memberships/`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, role_id: roleId }),
+  })
+}
+export function updateLabMembership(labId: number, userId: number, roleId: number, priority: string): Promise<void> {
+  return apiFetch<void>(`/labs/${labId}/memberships/${userId}/`, {
+    method: 'PUT',
+    body: JSON.stringify({ role_id: roleId, priority }),
+  })
+}
+export function removeLabMembership(labId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/labs/${labId}/memberships/${userId}/`, { method: 'DELETE' })
+}
+export function listLabMemberTrainingsForUser(labId: number, userId: number): Promise<ExperimentRole[]> {
+  return apiFetch<ExperimentRole[]>(`/labs/${labId}/memberships/${userId}/trainings`)
+}
+
+// Deliberately smaller than LabMember: for disambiguating same-named
+// staff when searching the whole system for someone to add to a lab,
+// not for picking among people already confirmed to belong to one.
+export interface SearchedUser {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
+}
+
+export function searchUsersNotInLab(labId: number, query: string): Promise<SearchedUser[]> {
+  return apiFetch<SearchedUser[]>(`/labs/${labId}/memberships/search?q=${encodeURIComponent(query)}`)
+}
+
+export interface Role {
+  id: number
+  name: string
+  description: string
+}
+
+export function listRoles(): Promise<Role[]> {
+  return apiFetch<Role[]>('/roles')
+}
+
+// experiment_roles.sql's AddLabMemberTraining/RemoveLabMemberTraining
+// handlers already existed (used server-side by the greeter/sitter
+// candidate-pool machinery) but had no frontend wrapper until the
+// lab-members admin page needed one.
+export function addLabMemberTraining(roleId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/experiment-roles/${roleId}/trainings/`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId }),
+  })
+}
+export function removeLabMemberTraining(roleId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/experiment-roles/${roleId}/trainings/${userId}`, { method: 'DELETE' })
+}
+
 // --- Experiments ---
 
 export interface Experiment {

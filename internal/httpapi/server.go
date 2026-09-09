@@ -145,12 +145,28 @@ func (s *Server) Routes() http.Handler {
 		// families/{familyID}/children vs. children/{childID}. Every group
 		// here is gated by lab-membership (requireLabMember*): a request
 		// naming a lab/resource the user doesn't belong to gets a 404, same
-		// as a nonexistent one. There's still no /labs resource, and
-		// role-based permissions *within* a lab (who can do what once
-		// they're a member) are a separate, not-yet-built concern.
+		// as a nonexistent one. There's still no /labs resource. Role-based
+		// permissions *within* a lab are mostly still a separate,
+		// not-yet-built concern -- the exceptions are /memberships'
+		// mutating routes (gated by requireLabAdminFromURL) and
+		// /experiment-roles/{roleID}/trainings' mutating routes (gated by
+		// requireLabAdminForExperimentRole, below): both change who's
+		// eligible to staff a lab's studies or hold its permission roles,
+		// so neither can be left at plain membership level like everything
+		// else here.
 		r.Route("/labs/{labID}", func(r chi.Router) {
 			r.Use(s.requireLabMemberFromURL)
 			r.Get("/members", s.handleListLabMembers)
+			r.Route("/memberships", func(r chi.Router) {
+				r.Get("/", s.handleListLabMemberships)
+				r.With(s.requireLabAdminFromURL).Post("/", s.handleCreateLabMembership)
+				r.With(s.requireLabAdminFromURL).Get("/search", s.handleSearchUsersNotInLab)
+				r.Route("/{userID}", func(r chi.Router) {
+					r.With(s.requireLabAdminFromURL).Put("/", s.handleUpdateLabMembership)
+					r.With(s.requireLabAdminFromURL).Delete("/", s.handleRemoveLabMembership)
+					r.Get("/trainings", s.handleListLabMemberTrainingsForUser)
+				})
+			})
 			r.Route("/experiment-types", func(r chi.Router) {
 				r.Post("/", s.handleCreateExperimentType)
 				r.Get("/", s.handleListExperimentTypesByLab)
@@ -282,9 +298,9 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/set-sitter", s.handleSetExperimentRoleSitter)
 			r.Post("/set-greeter", s.handleSetExperimentRoleGreeter)
 			r.Route("/trainings", func(r chi.Router) {
-				r.Post("/", s.handleAddLabMemberTraining)
+				r.With(s.requireLabAdminForExperimentRole).Post("/", s.handleAddLabMemberTraining)
 				r.Get("/", s.handleListLabMemberTrainingsForRole)
-				r.Delete("/{userID}", s.handleRemoveLabMemberTraining)
+				r.With(s.requireLabAdminForExperimentRole).Delete("/{userID}", s.handleRemoveLabMemberTraining)
 			})
 		})
 

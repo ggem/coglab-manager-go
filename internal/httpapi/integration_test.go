@@ -390,12 +390,14 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser(sitter): %v", err)
 	}
 
-	var roleID int64
-	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
-		fmt.Sprintf("scheduling-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
-		t.Fatalf("insert role: %v", err)
+	// The actor must be an admin of labID: this test assigns trainings
+	// via POST /experiment-roles/{roleID}/trainings/ as the actor, and
+	// that's now gated by requireLabAdminForExperimentRole.
+	var permissionRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "admin").Scan(&permissionRoleID); err != nil {
+		t.Fatalf("look up admin role: %v", err)
 	}
-	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, permissionRoleID); err != nil {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
@@ -637,12 +639,14 @@ func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
 		t.Fatalf("CreateUser(undergrad): %v", err)
 	}
 
-	var roleID int64
-	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
-		fmt.Sprintf("priority-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
-		t.Fatalf("insert role: %v", err)
+	// The actor must be an admin of labID: this test assigns trainings
+	// via POST /experiment-roles/{roleID}/trainings/ as the actor, and
+	// that's now gated by requireLabAdminForExperimentRole.
+	var permissionRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "admin").Scan(&permissionRoleID); err != nil {
+		t.Fatalf("look up admin role: %v", err)
 	}
-	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, permissionRoleID); err != nil {
 		t.Fatalf("insert lab_membership(actor): %v", err)
 	}
 	// director is inserted with an explicit high-seniority priority; the
@@ -650,10 +654,10 @@ func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
 	// to also prove the default itself sorts first.
 	if _, err := testPool.Exec(ctx,
 		"insert into lab_memberships (user_id, lab_id, role_id, priority) values ($1, $2, $3, 'lab_director')",
-		director.ID, labID, roleID); err != nil {
+		director.ID, labID, permissionRoleID); err != nil {
 		t.Fatalf("insert lab_membership(director): %v", err)
 	}
-	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", undergrad.ID, labID, roleID); err != nil {
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", undergrad.ID, labID, permissionRoleID); err != nil {
 		t.Fatalf("insert lab_membership(undergrad): %v", err)
 	}
 
@@ -803,12 +807,14 @@ func TestSchedulingFlow_DedicatedGreeter_Integration(t *testing.T) {
 		t.Fatalf("CreateUser(greeter): %v", err)
 	}
 
-	var roleID int64
-	if err := testPool.QueryRow(ctx, "insert into roles (name, description) values ($1, $2) returning id",
-		fmt.Sprintf("greeter-test-role-%d", time.Now().UnixNano()), "integration test role").Scan(&roleID); err != nil {
-		t.Fatalf("insert role: %v", err)
+	// The actor must be an admin of labID: this test assigns trainings
+	// via POST /experiment-roles/{roleID}/trainings/ as the actor, and
+	// that's now gated by requireLabAdminForExperimentRole.
+	var permissionRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "admin").Scan(&permissionRoleID); err != nil {
+		t.Fatalf("look up admin role: %v", err)
 	}
-	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, roleID); err != nil {
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, permissionRoleID); err != nil {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
@@ -1092,6 +1098,392 @@ func TestDeactivateExperimentRole_ClearsSitterAndGreeterRoles_Integration(t *tes
 	}
 	if _, err := testQueries.SetExperimentRoleGreeter(ctx, db.SetExperimentRoleGreeterParams{ID: role.ID, IsGreeterRole: true}); !errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("SetExperimentRoleGreeter(true) on a deactivated role: err = %v, want pgx.ErrNoRows", err)
+	}
+}
+
+// TestLabMembershipsFlow_Integration exercises the lab-members admin
+// page end to end against real SQL: search finds an existing user from
+// a *different* lab (proving membership search is system-wide, not
+// scoped to labs the searcher belongs to), a not-yet-member's trainings
+// endpoint 404s, adding them creates a membership at the priority
+// column's default, editing changes both role and priority, the
+// per-member trainings list starts empty and reflects an add/remove
+// through the existing AddLabMemberTraining/RemoveLabMemberTraining
+// endpoints, removing the membership also clears that lab's trainings
+// (code review: a removed member's trainings previously survived,
+// leaving them a still-schedulable candidate), and a second remove
+// finds no row.
+func TestLabMembershipsFlow_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labAID, labBID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Membership Test Lab A", fmt.Sprintf("mtla-%d", time.Now().UnixNano())).Scan(&labAID); err != nil {
+		t.Fatalf("insert lab A: %v", err)
+	}
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Membership Test Lab B", fmt.Sprintf("mtlb-%d", time.Now().UnixNano())).Scan(&labBID); err != nil {
+		t.Fatalf("insert lab B: %v", err)
+	}
+
+	var staffRoleID, coordinatorRoleID, adminRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "staff").Scan(&staffRoleID); err != nil {
+		t.Fatalf("look up staff role: %v", err)
+	}
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "coordinator").Scan(&coordinatorRoleID); err != nil {
+		t.Fatalf("look up coordinator role: %v", err)
+	}
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "admin").Scan(&adminRoleID); err != nil {
+		t.Fatalf("look up admin role: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	// The actor must be an *admin* of lab A, not just a member: every
+	// mutating memberships route (create/update/remove/search) is now
+	// gated by requireLabAdminFromURL.
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("membership-actor-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labAID, adminRoleID); err != nil {
+		t.Fatalf("insert lab_membership(actor): %v", err)
+	}
+
+	candidate, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("membership-candidate-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Casey", LastName: "Candidate",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(candidate): %v", err)
+	}
+	// Already a member of lab B, not lab A -- proves the search below
+	// finds existing people from elsewhere in the system, not just
+	// unaffiliated ones.
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", candidate.ID, labBID, staffRoleID); err != nil {
+		t.Fatalf("insert lab_membership(candidate, lab B): %v", err)
+	}
+
+	var experimenterRoleID int64
+	if err := testPool.QueryRow(ctx, "insert into experiment_roles (lab_id, name) values ($1, $2) returning id",
+		labAID, "Experimenter").Scan(&experimenterRoleID); err != nil {
+		t.Fatalf("insert experiment_role: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder, v any) {
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("unmarshal response body: %v; body = %s", err, rec.Body)
+		}
+	}
+
+	// Search from lab A finds the candidate even though they've never
+	// belonged to lab A.
+	var searchResults []searchedUserResponse
+	searchRec := do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/search?q=Casey", labAID), nil)
+	if searchRec.Code != http.StatusOK {
+		t.Fatalf("search status = %d, want %d; body = %s", searchRec.Code, http.StatusOK, searchRec.Body)
+	}
+	decode(searchRec, &searchResults)
+	found := false
+	for _, r := range searchResults {
+		if r.ID == candidate.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("search results = %+v, want candidate %d included", searchResults, candidate.ID)
+	}
+
+	// Code review: the trainings endpoint must confirm {userID} actually
+	// belongs to {labID} in the URL, not just that the caller does --
+	// the candidate is a member of lab B only at this point, so this
+	// must 404, not leak whatever they're trained for in lab B.
+	if rec := do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/%d/trainings", labAID, candidate.ID), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("trainings for a non-member status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/labs/%d/memberships/", labAID), createLabMembershipRequest{UserID: candidate.ID, RoleID: staffRoleID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("create membership status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	var afterCreate []labMembershipResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/", labAID), nil), &afterCreate)
+	var created *labMembershipResponse
+	for i := range afterCreate {
+		if afterCreate[i].UserID == candidate.ID {
+			created = &afterCreate[i]
+		}
+	}
+	if created == nil {
+		t.Fatalf("memberships after create = %+v, want candidate %d included", afterCreate, candidate.ID)
+	}
+	if created.RoleName != "staff" || created.Priority != "undergrad_no_project" {
+		t.Errorf("newly created membership = %+v, want role staff and the default priority", created)
+	}
+
+	// Editing changes both role and priority.
+	updateRec := do(http.MethodPut, fmt.Sprintf("/labs/%d/memberships/%d/", labAID, candidate.ID),
+		updateLabMembershipRequest{RoleID: coordinatorRoleID, Priority: "lab_director"})
+	if updateRec.Code != http.StatusNoContent {
+		t.Fatalf("update membership status = %d, want %d; body = %s", updateRec.Code, http.StatusNoContent, updateRec.Body)
+	}
+	var afterUpdate []labMembershipResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/", labAID), nil), &afterUpdate)
+	var updated *labMembershipResponse
+	for i := range afterUpdate {
+		if afterUpdate[i].UserID == candidate.ID {
+			updated = &afterUpdate[i]
+		}
+	}
+	if updated == nil || updated.RoleName != "coordinator" || updated.Priority != "lab_director" {
+		t.Fatalf("membership after update = %+v, want role coordinator and priority lab_director", updated)
+	}
+
+	// Trainings start empty, then reflect an add/remove through the
+	// existing per-role training endpoints.
+	var trainingsBefore []experimentRoleResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/%d/trainings", labAID, candidate.ID), nil), &trainingsBefore)
+	if len(trainingsBefore) != 0 {
+		t.Fatalf("trainings before = %+v, want none", trainingsBefore)
+	}
+
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", experimenterRoleID), addLabMemberTrainingRequest{UserID: candidate.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("add training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	var trainingsAfterAdd []experimentRoleResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/%d/trainings", labAID, candidate.ID), nil), &trainingsAfterAdd)
+	if len(trainingsAfterAdd) != 1 || trainingsAfterAdd[0].ID != experimenterRoleID {
+		t.Fatalf("trainings after add = %+v, want just role %d", trainingsAfterAdd, experimenterRoleID)
+	}
+
+	if rec := do(http.MethodDelete, fmt.Sprintf("/experiment-roles/%d/trainings/%d", experimenterRoleID, candidate.ID), nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	var trainingsAfterRemove []experimentRoleResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/%d/trainings", labAID, candidate.ID), nil), &trainingsAfterRemove)
+	if len(trainingsAfterRemove) != 0 {
+		t.Fatalf("trainings after remove = %+v, want none", trainingsAfterRemove)
+	}
+
+	// Re-add the training, then remove the *membership* (not the
+	// training directly) -- code review's fix must cascade this away
+	// too, or the candidate would stay a schedulable (if low-priority)
+	// candidate for lab A's studies despite no longer belonging to it.
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", experimenterRoleID), addLabMemberTrainingRequest{UserID: candidate.ID}); rec.Code != http.StatusNoContent {
+		t.Fatalf("re-add training status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+
+	// Removing the membership is a real deletion.
+	if rec := do(http.MethodDelete, fmt.Sprintf("/labs/%d/memberships/%d/", labAID, candidate.ID), nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove membership status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	var afterRemove []labMembershipResponse
+	decode(do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/", labAID), nil), &afterRemove)
+	for _, m := range afterRemove {
+		if m.UserID == candidate.ID {
+			t.Fatalf("memberships after remove = %+v, want candidate %d gone", afterRemove, candidate.ID)
+		}
+	}
+	var rowCount int
+	if err := testPool.QueryRow(ctx, "select count(*) from lab_memberships where user_id = $1 and lab_id = $2", candidate.ID, labAID).Scan(&rowCount); err != nil {
+		t.Fatalf("count lab_memberships: %v", err)
+	}
+	if rowCount != 0 {
+		t.Errorf("lab_memberships rows for candidate in lab A = %d, want 0 (a real delete, not a soft one)", rowCount)
+	}
+	var trainingRowCount int
+	if err := testPool.QueryRow(ctx,
+		"select count(*) from lab_member_trainings where user_id = $1 and experiment_role_id = $2",
+		candidate.ID, experimenterRoleID).Scan(&trainingRowCount); err != nil {
+		t.Fatalf("count lab_member_trainings: %v", err)
+	}
+	if trainingRowCount != 0 {
+		t.Errorf("lab_member_trainings rows for candidate/role %d after membership removal = %d, want 0 (removal must cascade)", experimenterRoleID, trainingRowCount)
+	}
+
+	// A second remove finds no row (the doc comment above claims this;
+	// this is the assertion code review found missing).
+	if rec := do(http.MethodDelete, fmt.Sprintf("/labs/%d/memberships/%d/", labAID, candidate.ID), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("second remove membership status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+	// Likewise a second update against the now-gone membership.
+	if rec := do(http.MethodPut, fmt.Sprintf("/labs/%d/memberships/%d/", labAID, candidate.ID),
+		updateLabMembershipRequest{RoleID: staffRoleID, Priority: "postdoc"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("update after remove status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body)
+	}
+}
+
+// TestLabMembershipsFlow_RequiresAdmin_Integration proves the
+// privilege-escalation gap from code review is actually closed against
+// real SQL: an ordinary (non-admin) lab member can view the roster but
+// cannot create, update, remove, or search for members to add --
+// including targeting themselves, which would otherwise let a staff
+// member self-promote to admin.
+func TestLabMembershipsFlow_RequiresAdmin_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	var labID int64
+	if err := testPool.QueryRow(ctx, "insert into labs (name, short_name) values ($1, $2) returning id",
+		"Membership Admin-Gate Test Lab", fmt.Sprintf("magtl-%d", time.Now().UnixNano())).Scan(&labID); err != nil {
+		t.Fatalf("insert lab: %v", err)
+	}
+
+	var staffRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "staff").Scan(&staffRoleID); err != nil {
+		t.Fatalf("look up staff role: %v", err)
+	}
+
+	hash, err := auth.HashPassword("s3cret-integration-test")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	actor, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("membership-nonadmin-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Actor", LastName: "Test", PasswordHash: &hash,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(actor): %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", actor.ID, labID, staffRoleID); err != nil {
+		t.Fatalf("insert lab_membership(actor): %v", err)
+	}
+
+	other, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     fmt.Sprintf("membership-nonadmin-other-%d@example.edu", time.Now().UnixNano()),
+		FirstName: "Other", LastName: "Person",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(other): %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "insert into lab_memberships (user_id, lab_id, role_id) values ($1, $2, $3)", other.ID, labID, staffRoleID); err != nil {
+		t.Fatalf("insert lab_membership(other): %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger())
+
+	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body)
+	}
+	cookie := loginRec.Result().Cookies()[0]
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var r *bytes.Reader
+		if body != nil {
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			r = bytes.NewReader(b)
+		} else {
+			r = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, r)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		s.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/", labID), nil); rec.Code != http.StatusOK {
+		t.Errorf("list status = %d, want %d (viewing the roster stays plain-membership level)", rec.Code, http.StatusOK)
+	}
+	if rec := do(http.MethodGet, fmt.Sprintf("/labs/%d/memberships/search?q=Other", labID), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("search status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/labs/%d/memberships/", labID), createLabMembershipRequest{UserID: other.ID, RoleID: staffRoleID}); rec.Code != http.StatusForbidden {
+		t.Errorf("create status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	// The self-escalation case named in code review: an ordinary member
+	// trying to grant themselves admin.
+	var selfAdminRoleID int64
+	if err := testPool.QueryRow(ctx, "select id from roles where name = $1", "admin").Scan(&selfAdminRoleID); err != nil {
+		t.Fatalf("look up admin role: %v", err)
+	}
+	if rec := do(http.MethodPut, fmt.Sprintf("/labs/%d/memberships/%d/", labID, actor.ID),
+		updateLabMembershipRequest{RoleID: selfAdminRoleID, Priority: "lab_director"}); rec.Code != http.StatusForbidden {
+		t.Errorf("self-promote status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	if rec := do(http.MethodDelete, fmt.Sprintf("/labs/%d/memberships/%d/", labID, other.ID), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("remove status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+
+	// Code review follow-up: assigning/unassigning a training role
+	// determines who's eligible to staff a lab's studies, the same
+	// privileged boundary as the membership routes above -- a non-admin
+	// must not be able to do this either, even though listing who's
+	// trained (GET) stays open to any member.
+	var experimenterRoleID int64
+	if err := testPool.QueryRow(ctx, "insert into experiment_roles (lab_id, name) values ($1, $2) returning id",
+		labID, "Experimenter").Scan(&experimenterRoleID); err != nil {
+		t.Fatalf("insert experiment_role: %v", err)
+	}
+	if rec := do(http.MethodGet, fmt.Sprintf("/experiment-roles/%d/trainings/", experimenterRoleID), nil); rec.Code != http.StatusOK {
+		t.Errorf("list trainings status = %d, want %d (viewing stays plain-membership level)", rec.Code, http.StatusOK)
+	}
+	if rec := do(http.MethodPost, fmt.Sprintf("/experiment-roles/%d/trainings/", experimenterRoleID), addLabMemberTrainingRequest{UserID: other.ID}); rec.Code != http.StatusForbidden {
+		t.Errorf("add training status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	// Also seed a training directly (bypassing the API) so the reject
+	// path for removing an *existing* training can be checked too.
+	if _, err := testPool.Exec(ctx, "insert into lab_member_trainings (user_id, experiment_role_id) values ($1, $2)", other.ID, experimenterRoleID); err != nil {
+		t.Fatalf("seed lab_member_training: %v", err)
+	}
+	if rec := do(http.MethodDelete, fmt.Sprintf("/experiment-roles/%d/trainings/%d", experimenterRoleID, other.ID), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("remove training status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	var otherTrainingRowCount int
+	if err := testPool.QueryRow(ctx, "select count(*) from lab_member_trainings where user_id = $1 and experiment_role_id = $2", other.ID, experimenterRoleID).Scan(&otherTrainingRowCount); err != nil {
+		t.Fatalf("count lab_member_trainings: %v", err)
+	}
+	if otherTrainingRowCount != 1 {
+		t.Errorf("lab_member_trainings rows for other/role after rejected add+remove = %d, want 1 (the seeded row, untouched)", otherTrainingRowCount)
+	}
+
+	// None of the rejected attempts actually changed anything.
+	var actorRoleID int64
+	if err := testPool.QueryRow(ctx, "select role_id from lab_memberships where user_id = $1 and lab_id = $2", actor.ID, labID).Scan(&actorRoleID); err != nil {
+		t.Fatalf("look up actor's role after rejected self-promote: %v", err)
+	}
+	if actorRoleID != staffRoleID {
+		t.Errorf("actor's role_id after rejected self-promote = %d, want unchanged %d", actorRoleID, staffRoleID)
+	}
+	var otherStillMember bool
+	if err := testPool.QueryRow(ctx, "select exists(select 1 from lab_memberships where user_id = $1 and lab_id = $2)", other.ID, labID).Scan(&otherStillMember); err != nil {
+		t.Fatalf("check other's membership after rejected remove: %v", err)
+	}
+	if !otherStillMember {
+		t.Error("other's membership was removed despite the rejected (403) request")
 	}
 }
 

@@ -50,6 +50,12 @@ type Querier interface {
 	CreateGuardian(ctx context.Context, arg CreateGuardianParams) (Guardian, error)
 	CreateLabAvailabilityGeneral(ctx context.Context, arg CreateLabAvailabilityGeneralParams) (LabAvailabilityGeneral, error)
 	CreateLabAvailabilitySpecific(ctx context.Context, arg CreateLabAvailabilitySpecificParams) (LabAvailabilitySpecific, error)
+	// priority is deliberately omitted -- the column's own default
+	// ('undergrad_no_project') applies, tuned afterward via
+	// UpdateLabMembership. The table's unique(user_id, lab_id) constraint
+	// rejects adding someone already a member (surfaces as a 409 via the
+	// existing writeDBError conflict handling).
+	CreateLabMembership(ctx context.Context, arg CreateLabMembershipParams) (LabMembership, error)
 	CreateNewsletter(ctx context.Context, arg CreateNewsletterParams) (Newsletter, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
 	CreateProtocol(ctx context.Context, arg CreateProtocolParams) (Protocol, error)
@@ -121,6 +127,11 @@ type Querier interface {
 	// All-protocols total for the same window, lab-wide (including
 	// experiments with no protocol assigned).
 	HRCReportTotal(ctx context.Context, arg HRCReportTotalParams) (int64, error)
+	// Backs requireLabAdminFromURL: unlike plain lab membership (checked by
+	// GetLabMembership), managing OTHER members -- creating, editing their
+	// permission role and priority, or removing them -- requires the caller
+	// to hold this lab's "admin" role, not just any membership.
+	IsLabAdmin(ctx context.Context, arg IsLabAdminParams) (bool, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	// Joined to users/experiment_roles for display -- a scheduled
 	// appointment's staff assignment is shown by name and role, not id.
@@ -224,11 +235,23 @@ type Querier interface {
 	// a valid candidate -- just sorted last -- rather than silently
 	// vanishing from the candidate pool entirely.
 	ListLabMemberTrainingsForRoleByPriority(ctx context.Context, arg ListLabMemberTrainingsForRoleByPriorityParams) ([]User, error)
-	ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error)
+	// Scoped to one lab: a user's trainings for OTHER labs aren't that
+	// lab's business, and the lab-members admin page (the only caller) only
+	// ever wants "what is this member trained for here". The handler also
+	// confirms {userID} is actually a member of {labID} before calling this
+	// -- otherwise a member of lab A could request another lab's member's
+	// trainings just by naming their user id.
+	ListLabMemberTrainingsForUser(ctx context.Context, arg ListLabMemberTrainingsForUserParams) ([]ExperimentRole, error)
 	// The candidate pool a picker (e.g. principal investigators) draws
 	// from -- full User rows, same "select users.*, filter deactivated"
 	// shape as ListLabMemberTrainingsForRole.
 	ListLabMembers(ctx context.Context, labID int64) ([]User, error)
+	// The lab-members admin page's roster: membership details (permission
+	// role, scheduling priority), not just the bare user rows ListLabMembers
+	// (a different, existing query used by several AttachList pickers)
+	// returns -- that one's response shape is relied on elsewhere and
+	// shouldn't change.
+	ListLabMembershipsForLab(ctx context.Context, labID int64) ([]ListLabMembershipsForLabRow, error)
 	ListLabsForUser(ctx context.Context, userID int64) ([]Lab, error)
 	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)
@@ -279,6 +302,22 @@ type Querier interface {
 	RemoveExperimentPrincipalInvestigator(ctx context.Context, arg RemoveExperimentPrincipalInvestigatorParams) error
 	RemoveExperimentTrainingRequirement(ctx context.Context, arg RemoveExperimentTrainingRequirementParams) error
 	RemoveLabMemberTraining(ctx context.Context, arg RemoveLabMemberTrainingParams) error
+	// Run alongside RemoveLabMembership, in the same transaction: removing
+	// someone from a lab should also retire them from that lab's studies,
+	// not leave their trainings behind as a dangling, still-schedulable
+	// candidate (see ListLabMemberTrainingsForRoleByPriority's LEFT JOIN,
+	// which tolerates a trained user with no lab_memberships row for
+	// legacy-import reasons -- that tolerance was never meant to cover a
+	// live "remove this person" action producing the same shape on
+	// purpose).
+	RemoveLabMemberTrainingsForUserInLab(ctx context.Context, arg RemoveLabMemberTrainingsForUserInLabParams) error
+	// A hard delete, not a deactivation -- lab_memberships has no
+	// deactivated_at column. Returns the removed row (rather than :exec) so
+	// the caller can 404 when nothing matched, and use the real
+	// lab_memberships.id for its audit event -- consistent with
+	// Create/UpdateLabMembership, which both use the actual row id, not the
+	// user id.
+	RemoveLabMembership(ctx context.Context, arg RemoveLabMembershipParams) (LabMembership, error)
 	RevokeSession(ctx context.Context, tokenHash []byte) error
 	// Commits a chosen slot: the caller re-validates availability itself
 	// immediately before calling this (defensive re-check against staleness,
@@ -312,6 +351,11 @@ type Querier interface {
 	// "review a handful of candidates" tool for staff, not a ranked search --
 	// ranking isn't worth the extra query complexity here.
 	SearchFamilies(ctx context.Context, arg SearchFamiliesParams) ([]Family, error)
+	// Candidate pool for "add an existing person to this lab" -- same
+	// word_similarity name-matching pattern as SearchChildren/
+	// SearchFamilies (see children.sql), scoped to active users who
+	// aren't already a member of this lab.
+	SearchUsersNotInLab(ctx context.Context, arg SearchUsersNotInLabParams) ([]User, error)
 	// Mirrors ReleaseAppointment's status guard: only while an appointment
 	// is still unscheduled or scheduled-but-not-yet-arrived does requesting
 	// a dedicated greeter mean anything -- an arrived/released/etc.
@@ -344,6 +388,7 @@ type Querier interface {
 	UpdateFamily(ctx context.Context, arg UpdateFamilyParams) (Family, error)
 	UpdateGrant(ctx context.Context, arg UpdateGrantParams) (Grant, error)
 	UpdateGuardian(ctx context.Context, arg UpdateGuardianParams) (Guardian, error)
+	UpdateLabMembership(ctx context.Context, arg UpdateLabMembershipParams) (LabMembership, error)
 	UpdateNewsletter(ctx context.Context, arg UpdateNewsletterParams) (Newsletter, error)
 	UpdateProtocol(ctx context.Context, arg UpdateProtocolParams) (Protocol, error)
 	UpdateZipCode(ctx context.Context, arg UpdateZipCodeParams) (Zipcode, error)

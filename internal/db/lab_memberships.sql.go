@@ -9,6 +9,38 @@ import (
 	"context"
 )
 
+const createLabMembership = `-- name: CreateLabMembership :one
+insert into lab_memberships (user_id, lab_id, role_id)
+values ($1, $2, $3)
+returning id, user_id, lab_id, role_id, created_at, updated_at, priority
+`
+
+type CreateLabMembershipParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+	RoleID int64 `json:"role_id"`
+}
+
+// priority is deliberately omitted -- the column's own default
+// ('undergrad_no_project') applies, tuned afterward via
+// UpdateLabMembership. The table's unique(user_id, lab_id) constraint
+// rejects adding someone already a member (surfaces as a 409 via the
+// existing writeDBError conflict handling).
+func (q *Queries) CreateLabMembership(ctx context.Context, arg CreateLabMembershipParams) (LabMembership, error) {
+	row := q.db.QueryRow(ctx, createLabMembership, arg.UserID, arg.LabID, arg.RoleID)
+	var i LabMembership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LabID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Priority,
+	)
+	return i, err
+}
+
 const getLabMembership = `-- name: GetLabMembership :one
 select id, user_id, lab_id, role_id, created_at, updated_at, priority from lab_memberships where user_id = $1 and lab_id = $2
 `
@@ -31,6 +63,32 @@ func (q *Queries) GetLabMembership(ctx context.Context, arg GetLabMembershipPara
 		&i.Priority,
 	)
 	return i, err
+}
+
+const isLabAdmin = `-- name: IsLabAdmin :one
+select exists (
+    select 1 from lab_memberships
+    join roles on roles.id = lab_memberships.role_id
+    where lab_memberships.user_id = $1
+      and lab_memberships.lab_id = $2
+      and roles.name = 'admin'
+)
+`
+
+type IsLabAdminParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+}
+
+// Backs requireLabAdminFromURL: unlike plain lab membership (checked by
+// GetLabMembership), managing OTHER members -- creating, editing their
+// permission role and priority, or removing them -- requires the caller
+// to hold this lab's "admin" role, not just any membership.
+func (q *Queries) IsLabAdmin(ctx context.Context, arg IsLabAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLabAdmin, arg.UserID, arg.LabID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listLabMembers = `-- name: ListLabMembers :many
@@ -74,6 +132,60 @@ func (q *Queries) ListLabMembers(ctx context.Context, labID int64) ([]User, erro
 	return items, nil
 }
 
+const listLabMembershipsForLab = `-- name: ListLabMembershipsForLab :many
+select users.id as user_id, users.first_name, users.last_name, users.email,
+       lab_memberships.role_id, roles.name as role_name, lab_memberships.priority
+from lab_memberships
+join users on users.id = lab_memberships.user_id
+join roles on roles.id = lab_memberships.role_id
+where lab_memberships.lab_id = $1
+  and users.deactivated_at is null
+order by users.last_name, users.first_name
+`
+
+type ListLabMembershipsForLabRow struct {
+	UserID    int64  `json:"user_id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Email     string `json:"email"`
+	RoleID    int64  `json:"role_id"`
+	RoleName  string `json:"role_name"`
+	Priority  string `json:"priority"`
+}
+
+// The lab-members admin page's roster: membership details (permission
+// role, scheduling priority), not just the bare user rows ListLabMembers
+// (a different, existing query used by several AttachList pickers)
+// returns -- that one's response shape is relied on elsewhere and
+// shouldn't change.
+func (q *Queries) ListLabMembershipsForLab(ctx context.Context, labID int64) ([]ListLabMembershipsForLabRow, error) {
+	rows, err := q.db.Query(ctx, listLabMembershipsForLab, labID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLabMembershipsForLabRow
+	for rows.Next() {
+		var i ListLabMembershipsForLabRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Email,
+			&i.RoleID,
+			&i.RoleName,
+			&i.Priority,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLabsForUser = `-- name: ListLabsForUser :many
 select labs.id, labs.name, labs.short_name, labs.created_at, labs.updated_at from labs
 join lab_memberships on lab_memberships.lab_id = labs.id
@@ -105,4 +217,148 @@ func (q *Queries) ListLabsForUser(ctx context.Context, userID int64) ([]Lab, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeLabMemberTrainingsForUserInLab = `-- name: RemoveLabMemberTrainingsForUserInLab :exec
+delete from lab_member_trainings
+where user_id = $1
+  and experiment_role_id in (select id from experiment_roles where lab_id = $2)
+`
+
+type RemoveLabMemberTrainingsForUserInLabParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+}
+
+// Run alongside RemoveLabMembership, in the same transaction: removing
+// someone from a lab should also retire them from that lab's studies,
+// not leave their trainings behind as a dangling, still-schedulable
+// candidate (see ListLabMemberTrainingsForRoleByPriority's LEFT JOIN,
+// which tolerates a trained user with no lab_memberships row for
+// legacy-import reasons -- that tolerance was never meant to cover a
+// live "remove this person" action producing the same shape on
+// purpose).
+func (q *Queries) RemoveLabMemberTrainingsForUserInLab(ctx context.Context, arg RemoveLabMemberTrainingsForUserInLabParams) error {
+	_, err := q.db.Exec(ctx, removeLabMemberTrainingsForUserInLab, arg.UserID, arg.LabID)
+	return err
+}
+
+const removeLabMembership = `-- name: RemoveLabMembership :one
+delete from lab_memberships where user_id = $1 and lab_id = $2
+returning id, user_id, lab_id, role_id, created_at, updated_at, priority
+`
+
+type RemoveLabMembershipParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+}
+
+// A hard delete, not a deactivation -- lab_memberships has no
+// deactivated_at column. Returns the removed row (rather than :exec) so
+// the caller can 404 when nothing matched, and use the real
+// lab_memberships.id for its audit event -- consistent with
+// Create/UpdateLabMembership, which both use the actual row id, not the
+// user id.
+func (q *Queries) RemoveLabMembership(ctx context.Context, arg RemoveLabMembershipParams) (LabMembership, error) {
+	row := q.db.QueryRow(ctx, removeLabMembership, arg.UserID, arg.LabID)
+	var i LabMembership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LabID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Priority,
+	)
+	return i, err
+}
+
+const searchUsersNotInLab = `-- name: SearchUsersNotInLab :many
+select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at
+from users
+where
+    ($1::text is null
+        or word_similarity($1, first_name) > 0.2
+        or word_similarity($1, last_name) > 0.2)
+    and users.deactivated_at is null
+    and not exists (
+        select 1 from lab_memberships
+        where lab_memberships.user_id = users.id and lab_memberships.lab_id = $2
+    )
+order by users.last_name, users.first_name
+limit 20
+`
+
+type SearchUsersNotInLabParams struct {
+	NameQuery *string `json:"name_query"`
+	LabID     int64   `json:"lab_id"`
+}
+
+// Candidate pool for "add an existing person to this lab" -- same
+// word_similarity name-matching pattern as SearchChildren/
+// SearchFamilies (see children.sql), scoped to active users who
+// aren't already a member of this lab.
+func (q *Queries) SearchUsersNotInLab(ctx context.Context, arg SearchUsersNotInLabParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsersNotInLab, arg.NameQuery, arg.LabID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.PasswordHash,
+			&i.IsPlatformAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeactivatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateLabMembership = `-- name: UpdateLabMembership :one
+update lab_memberships
+set role_id = $1, priority = $2
+where user_id = $3 and lab_id = $4
+returning id, user_id, lab_id, role_id, created_at, updated_at, priority
+`
+
+type UpdateLabMembershipParams struct {
+	RoleID   int64  `json:"role_id"`
+	Priority string `json:"priority"`
+	UserID   int64  `json:"user_id"`
+	LabID    int64  `json:"lab_id"`
+}
+
+func (q *Queries) UpdateLabMembership(ctx context.Context, arg UpdateLabMembershipParams) (LabMembership, error) {
+	row := q.db.QueryRow(ctx, updateLabMembership,
+		arg.RoleID,
+		arg.Priority,
+		arg.UserID,
+		arg.LabID,
+	)
+	var i LabMembership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LabID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Priority,
+	)
+	return i, err
 }

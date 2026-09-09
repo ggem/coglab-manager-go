@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import LookupTable from './LookupTable'
 import CreateDeleteList from './CreateDeleteList'
+import LabMembers from './LabMembers'
 import {
   createCondition,
   createConditionValue,
@@ -55,6 +56,7 @@ type Tab =
   | 'zipcodes'
   | 'experimenttypes'
   | 'scheduleblockings'
+  | 'members'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'conditions', label: 'Conditions' },
@@ -65,6 +67,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'zipcodes', label: 'Zip Codes' },
   { key: 'experimenttypes', label: 'Experiment Types' },
   { key: 'scheduleblockings', label: 'Schedule Blockings' },
+  { key: 'members', label: 'Members' },
 ]
 
 export default function LabSetup() {
@@ -191,6 +194,8 @@ export default function LabSetup() {
           remove={deactivateScheduleBlocking}
         />
       )}
+
+      {tab === 'members' && <LabMembers labId={id} />}
       </div>
     </div>
   )

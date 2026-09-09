@@ -39,6 +39,76 @@ func (s *Server) requireLabMemberFromURL(next http.Handler) http.Handler {
 	})
 }
 
+// requireLabAdmin verifies the current user holds this lab's "admin"
+// permission role, writing a 403 (not requireLabMember's 404: the caller
+// already knows the lab exists and that they belong to it, so there's
+// nothing left to hide by pretending the route doesn't exist -- this is
+// a real "you don't have permission" response) and returning ok=false if
+// not.
+func (s *Server) requireLabAdmin(w http.ResponseWriter, r *http.Request, labID int64) bool {
+	userID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return false
+	}
+	isAdmin, err := s.queries.IsLabAdmin(r.Context(), db.IsLabAdminParams{UserID: userID, LabID: labID})
+	if err != nil {
+		s.writeDBError(w, err)
+		return false
+	}
+	if !isAdmin {
+		writeError(w, http.StatusForbidden, "admin permission required")
+		return false
+	}
+	return true
+}
+
+// requireLabAdminFromURL gates the lab-membership *management* routes
+// (add/edit/remove a membership, search candidates to add) -- unlike
+// requireLabMemberFromURL's plain membership check, these actions can
+// change who's in the lab and what permission role they hold (including
+// granting admin), so they need the caller to hold this lab's "admin"
+// role, not just any membership. Applied per-route (via r.With), not to
+// the whole /memberships group -- viewing the roster and a member's own
+// trainings stays at plain-membership level, matching every other
+// lab-scoped list endpoint.
+func (s *Server) requireLabAdminFromURL(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		labID, ok := idParam(w, r, "labID")
+		if !ok {
+			return
+		}
+		if !s.requireLabAdmin(w, r, labID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireLabAdminForExperimentRole gates training *assignment* (who's
+// trained for a role, not the role definition itself): assigning or
+// unassigning a member's training determines who's eligible to staff a
+// lab's studies, the same privileged-management boundary as the
+// /memberships routes above, so it needs admin, not just membership.
+// Listing who's trained for a role (GET) stays at plain-membership
+// level, same as GET /memberships/{userID}/trainings.
+func (s *Server) requireLabAdminForExperimentRole(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(w, r, "roleID")
+		if !ok {
+			return
+		}
+		role, err := s.queries.GetExperimentRoleByID(r.Context(), id)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !s.requireLabAdmin(w, r, role.LabID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // The remaining middlewares are for the flat /{resource}/{id} routes: a
 // resource's lab isn't in the URL there, so each one resolves it from the
 // resource itself (reusing the existing GetByID queries, which already

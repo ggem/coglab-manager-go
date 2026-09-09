@@ -134,11 +134,23 @@ const listLabMemberTrainingsForUser = `-- name: ListLabMemberTrainingsForUser :m
 select experiment_roles.id, experiment_roles.lab_id, experiment_roles.name, experiment_roles.deactivated_at, experiment_roles.created_at, experiment_roles.updated_at, experiment_roles.is_sitter_role, experiment_roles.is_greeter_role from experiment_roles
 join lab_member_trainings on lab_member_trainings.experiment_role_id = experiment_roles.id
 where lab_member_trainings.user_id = $1
+  and experiment_roles.lab_id = $2
 order by experiment_roles.id
 `
 
-func (q *Queries) ListLabMemberTrainingsForUser(ctx context.Context, userID int64) ([]ExperimentRole, error) {
-	rows, err := q.db.Query(ctx, listLabMemberTrainingsForUser, userID)
+type ListLabMemberTrainingsForUserParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+}
+
+// Scoped to one lab: a user's trainings for OTHER labs aren't that
+// lab's business, and the lab-members admin page (the only caller) only
+// ever wants "what is this member trained for here". The handler also
+// confirms {userID} is actually a member of {labID} before calling this
+// -- otherwise a member of lab A could request another lab's member's
+// trainings just by naming their user id.
+func (q *Queries) ListLabMemberTrainingsForUser(ctx context.Context, arg ListLabMemberTrainingsForUserParams) ([]ExperimentRole, error) {
+	rows, err := q.db.Query(ctx, listLabMemberTrainingsForUser, arg.UserID, arg.LabID)
 	if err != nil {
 		return nil, err
 	}
