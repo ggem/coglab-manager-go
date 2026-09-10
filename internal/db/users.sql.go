@@ -134,6 +134,70 @@ func (q *Queries) GetUserBySSOIdentity(ctx context.Context, arg GetUserBySSOIden
 	return i, err
 }
 
+const listUsers = `-- name: ListUsers :many
+select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject from users order by created_at
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.PasswordHash,
+			&i.IsPlatformAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeactivatedAt,
+			&i.SsoIssuer,
+			&i.SsoSubject,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setUserPassword = `-- name: SetUserPassword :exec
+update users set password_hash = $1 where id = $2
+`
+
+type SetUserPasswordParams struct {
+	PasswordHash *string `json:"password_hash"`
+	ID           int64   `json:"id"`
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, setUserPassword, arg.PasswordHash, arg.ID)
+	return err
+}
+
+const setUserPlatformAdmin = `-- name: SetUserPlatformAdmin :exec
+update users set is_platform_admin = $1 where id = $2
+`
+
+type SetUserPlatformAdminParams struct {
+	IsPlatformAdmin bool  `json:"is_platform_admin"`
+	ID              int64 `json:"id"`
+}
+
+func (q *Queries) SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) error {
+	_, err := q.db.Exec(ctx, setUserPlatformAdmin, arg.IsPlatformAdmin, arg.ID)
+	return err
+}
+
 const setUserSSOIdentity = `-- name: SetUserSSOIdentity :exec
 update users set sso_issuer = $1, sso_subject = $2 where id = $3
 `

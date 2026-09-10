@@ -35,6 +35,14 @@ type Querier interface {
 	// same as ReleaseAppointment, since 'arrived' also falls outside
 	// appointments_one_active_hold_per_child's predicate.
 	ArriveAppointment(ctx context.Context, id int64) (Appointment, error)
+	// Atomically checks and consumes a token in one statement: the WHERE
+	// clause and the used_at write happen under the same row lock, so two
+	// concurrent redemptions of the same token can't both observe
+	// used_at is null and both proceed -- the second one's WHERE clause
+	// simply no longer matches once the first commits, returning no rows.
+	// A separate SELECT-then-UPDATE (checking used_at, then writing it in a
+	// later statement) would leave a window for exactly that race.
+	ClaimPasswordSetToken(ctx context.Context, tokenHash []byte) (PasswordSetToken, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
 	CreateAppointmentExperimenter(ctx context.Context, arg CreateAppointmentExperimenterParams) (AppointmentExperimenter, error)
 	CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) (AuditEvent, error)
@@ -58,6 +66,7 @@ type Querier interface {
 	CreateLabMembership(ctx context.Context, arg CreateLabMembershipParams) (LabMembership, error)
 	CreateNewsletter(ctx context.Context, arg CreateNewsletterParams) (Newsletter, error)
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
+	CreatePasswordSetToken(ctx context.Context, arg CreatePasswordSetTokenParams) (PasswordSetToken, error)
 	CreateProtocol(ctx context.Context, arg CreateProtocolParams) (Protocol, error)
 	CreateRecruitmentSource(ctx context.Context, name string) (RecruitmentSource, error)
 	CreateScheduleBlocking(ctx context.Context, arg CreateScheduleBlockingParams) (ScheduleBlocking, error)
@@ -277,6 +286,7 @@ type Querier interface {
 	// One query for a whole multi-day search range, rather than one call per
 	// candidate day -- the caller groups rows by date in Go.
 	ListScheduleBlockingsForDateRange(ctx context.Context, arg ListScheduleBlockingsForDateRangeParams) ([]ScheduleBlocking, error)
+	ListUsers(ctx context.Context) ([]User, error)
 	ListZipCodesByLab(ctx context.Context, labID int64) ([]Zipcode, error)
 	MarkAppointmentReminderSent(ctx context.Context, id int64) error
 	MarkNewsletterSent(ctx context.Context, arg MarkNewsletterSentParams) error
@@ -378,6 +388,8 @@ type Querier interface {
 	// rather than a confusing 404; unsetting (false) is always allowed
 	// regardless of deactivated status, to clean up any stale flag.
 	SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error)
+	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) error
 	// Backfills the link the first time an existing local-password account
 	// signs in via SSO -- matched by email at that point, not (issuer, sub)
 	// (which didn't exist on the row yet).

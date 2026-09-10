@@ -25,10 +25,11 @@ var (
 // Identity is what an authentication method resolves a set of credentials
 // to, independent of how that resolution happened.
 type Identity struct {
-	UserID    int64
-	Email     string
-	FirstName string
-	LastName  string
+	UserID          int64
+	Email           string
+	FirstName       string
+	LastName        string
+	IsPlatformAdmin bool
 }
 
 // LocalAuthenticator verifies an email/password pair against stored
@@ -91,9 +92,10 @@ func (a *PasswordAuthenticator) Authenticate(ctx context.Context, email, passwor
 	}
 
 	return Identity{
-		UserID:    user.ID,
-		Email:     user.Email,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
+		UserID:          user.ID,
+		Email:           user.Email,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		IsPlatformAdmin: user.IsPlatformAdmin,
 	}, nil
 }

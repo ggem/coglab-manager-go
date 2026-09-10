@@ -25,3 +25,12 @@ select * from users where sso_issuer = sqlc.arg(sso_issuer) and sso_subject = sq
 -- signs in via SSO -- matched by email at that point, not (issuer, sub)
 -- (which didn't exist on the row yet).
 update users set sso_issuer = sqlc.arg(sso_issuer), sso_subject = sqlc.arg(sso_subject) where id = sqlc.arg(id);
+
+-- name: SetUserPassword :exec
+update users set password_hash = sqlc.arg(password_hash) where id = sqlc.arg(id);
+
+-- name: SetUserPlatformAdmin :exec
+update users set is_platform_admin = sqlc.arg(is_platform_admin) where id = sqlc.arg(id);
+
+-- name: ListUsers :many
+select * from users order by created_at;

@@ -21,11 +21,17 @@ type Querier struct {
 	GetUserByIDFunc           func(ctx context.Context, id int64) (db.User, error)
 	GetUserBySSOIdentityFunc  func(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error)
 	SetUserSSOIdentityFunc    func(ctx context.Context, arg db.SetUserSSOIdentityParams) error
+	SetUserPasswordFunc       func(ctx context.Context, arg db.SetUserPasswordParams) error
+	SetUserPlatformAdminFunc  func(ctx context.Context, arg db.SetUserPlatformAdminParams) error
+	ListUsersFunc             func(ctx context.Context) ([]db.User, error)
 	CreateSessionFunc         func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error)
 	GetSessionByTokenHashFunc func(ctx context.Context, tokenHash []byte) (db.Session, error)
 	RevokeSessionFunc         func(ctx context.Context, tokenHash []byte) error
 	TouchSessionLastSeenFunc  func(ctx context.Context, id int64) error
 	CreateAuditEventFunc      func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error)
+
+	CreatePasswordSetTokenFunc func(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error)
+	ClaimPasswordSetTokenFunc  func(ctx context.Context, tokenHash []byte) (db.PasswordSetToken, error)
 
 	CreateFamilyFunc   func(ctx context.Context, arg db.CreateFamilyParams) (db.Family, error)
 	GetFamilyByIDFunc  func(ctx context.Context, id int64) (db.Family, error)
@@ -236,6 +242,41 @@ func (q *Querier) SetUserSSOIdentity(ctx context.Context, arg db.SetUserSSOIdent
 		panic("dbfake: SetUserSSOIdentity not implemented")
 	}
 	return q.SetUserSSOIdentityFunc(ctx, arg)
+}
+
+func (q *Querier) SetUserPassword(ctx context.Context, arg db.SetUserPasswordParams) error {
+	if q.SetUserPasswordFunc == nil {
+		panic("dbfake: SetUserPassword not implemented")
+	}
+	return q.SetUserPasswordFunc(ctx, arg)
+}
+
+func (q *Querier) SetUserPlatformAdmin(ctx context.Context, arg db.SetUserPlatformAdminParams) error {
+	if q.SetUserPlatformAdminFunc == nil {
+		panic("dbfake: SetUserPlatformAdmin not implemented")
+	}
+	return q.SetUserPlatformAdminFunc(ctx, arg)
+}
+
+func (q *Querier) ListUsers(ctx context.Context) ([]db.User, error) {
+	if q.ListUsersFunc == nil {
+		panic("dbfake: ListUsers not implemented")
+	}
+	return q.ListUsersFunc(ctx)
+}
+
+func (q *Querier) CreatePasswordSetToken(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error) {
+	if q.CreatePasswordSetTokenFunc == nil {
+		panic("dbfake: CreatePasswordSetToken not implemented")
+	}
+	return q.CreatePasswordSetTokenFunc(ctx, arg)
+}
+
+func (q *Querier) ClaimPasswordSetToken(ctx context.Context, tokenHash []byte) (db.PasswordSetToken, error) {
+	if q.ClaimPasswordSetTokenFunc == nil {
+		panic("dbfake: ClaimPasswordSetToken not implemented")
+	}
+	return q.ClaimPasswordSetTokenFunc(ctx, tokenHash)
 }
 
 func (q *Querier) CreateSession(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {

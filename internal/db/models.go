@@ -293,6 +293,15 @@ type Note struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type PasswordSetToken struct {
+	ID        int64              `json:"id"`
+	TokenHash []byte             `json:"token_hash"`
+	UserID    int64              `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+}
+
 type Protocol struct {
 	ID            int64              `json:"id"`
 	LabID         int64              `json:"lab_id"`

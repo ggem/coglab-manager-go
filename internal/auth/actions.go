@@ -7,4 +7,6 @@ const (
 	ActionLoginSucceeded = "user.login_succeeded"
 	ActionLoginFailed    = "user.login_failed"
 	ActionLogout         = "user.logout"
+	ActionUserCreated    = "user.created"
+	ActionPasswordSet    = "user.password_set"
 )

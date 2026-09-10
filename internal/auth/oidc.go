@@ -208,9 +208,10 @@ func identityFromUser(user db.User) (Identity, error) {
 		return Identity{}, ErrAccountDeactivated
 	}
 	return Identity{
-		UserID:    user.ID,
-		Email:     user.Email,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
+		UserID:          user.ID,
+		Email:           user.Email,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		IsPlatformAdmin: user.IsPlatformAdmin,
 	}, nil
 }
