@@ -159,6 +159,16 @@ export function resendInvite(userId: number): Promise<ResendInviteResult> {
   })
 }
 
+// One-way, matching every other domain object's deactivation convention
+// in this app -- no reactivate endpoint exists. Also immediately revokes
+// any session the account holds. Rejected by the server (400) if userId
+// is the caller's own account.
+export function deactivateUser(userId: number): Promise<void> {
+  return apiFetch<void>(`/admin/users/${userId}/deactivate`, {
+    method: 'POST',
+  })
+}
+
 export interface CreateLabMembershipForNewUserInput {
   email: string
   first_name: string

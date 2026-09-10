@@ -176,6 +176,51 @@ func (s *Server) handleResendInvite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resendInviteResponse{InviteEmailSent: sent})
 }
 
+// handleDeactivateUser blocks an account from logging in ever again
+// (matching every other domain object's deactivation convention in this
+// codebase -- one-way, no reactivate) and immediately revokes any
+// session it already holds, so a deactivation actually takes effect
+// right away rather than merely blocking the *next* login while an
+// existing session keeps working for up to sessionTTL. Refuses to let a
+// platform admin deactivate their own account: there's no legitimate
+// reason to self-lock via this endpoint (sign out instead), and the
+// alternative is a confusing accidental lockout with no recovery path
+// short of cmd/admin.
+func (s *Server) handleDeactivateUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := idParam(w, r, "userID")
+	if !ok {
+		return
+	}
+	callerID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return
+	}
+	if userID == callerID {
+		writeError(w, http.StatusBadRequest, "cannot deactivate your own account")
+		return
+	}
+
+	txErr := s.withTx(r.Context(), func(q db.Querier) error {
+		if _, err := q.DeactivateUser(r.Context(), userID); err != nil {
+			return err
+		}
+		return q.RevokeAllSessionsForUser(r.Context(), userID)
+	})
+	if txErr != nil {
+		s.writeDBError(w, txErr)
+		return
+	}
+
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: &callerID,
+		Action:      auth.ActionUserDeactivated,
+		EntityType:  ptr("user"),
+		EntityID:    &userID,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // sendInviteEmail emails a password-set link for token, which the caller
 // has already generated (and, for a fresh account, committed alongside
 // the user row -- see handleCreateUser). This is deliberately the only

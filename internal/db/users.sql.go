@@ -60,6 +60,32 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deactivateUser = `-- name: DeactivateUser :one
+update users set deactivated_at = now() where id = $1 returning id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject
+`
+
+// :one (RETURNING), not :exec, so deactivating a nonexistent id 404s
+// instead of silently reporting success -- same reasoning as
+// RemoveLabMembership.
+func (q *Queries) DeactivateUser(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, deactivateUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.PasswordHash,
+		&i.IsPlatformAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 select id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject from users where lower(email) = lower($1)
 `

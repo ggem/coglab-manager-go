@@ -94,6 +94,10 @@ type Querier interface {
 	DeactivateNewsletter(ctx context.Context, id int64) error
 	DeactivateProtocol(ctx context.Context, id int64) error
 	DeactivateScheduleBlocking(ctx context.Context, id int64) error
+	// :one (RETURNING), not :exec, so deactivating a nonexistent id 404s
+	// instead of silently reporting success -- same reasoning as
+	// RemoveLabMembership.
+	DeactivateUser(ctx context.Context, id int64) (User, error)
 	DeactivateZipCode(ctx context.Context, id int64) error
 	// Per-child listing of 'arrived' appointments for one experiment in a
 	// date range, with age at the appointment (in months) and the family's
@@ -329,6 +333,11 @@ type Querier interface {
 	// Create/UpdateLabMembership, which both use the actual row id, not the
 	// user id.
 	RemoveLabMembership(ctx context.Context, arg RemoveLabMembershipParams) (LabMembership, error)
+	// Deactivating a user must end their access immediately, not just block
+	// future logins -- without this, a session issued before deactivation
+	// would keep working until it naturally expires (up to sessionTTL, 7
+	// days).
+	RevokeAllSessionsForUser(ctx context.Context, userID int64) error
 	RevokeSession(ctx context.Context, tokenHash []byte) error
 	// Commits a chosen slot: the caller re-validates availability itself
 	// immediately before calling this (defensive re-check against staleness,

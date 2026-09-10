@@ -486,3 +486,85 @@ func TestHandleCreateLabMembershipForNewUser_RequiresAdmin(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }
+
+func TestHandleDeactivateUser_Success(t *testing.T) {
+	var deactivatedID int64 = -1
+	var revokedSessionsUserID int64 = -1
+	q := &dbfake.Querier{
+		DeactivateUserFunc: func(ctx context.Context, id int64) (db.User, error) {
+			deactivatedID = id
+			return db.User{ID: id, DeactivatedAt: futureTimestamptz()}, nil
+		},
+		RevokeAllSessionsForUserFunc: func(ctx context.Context, userID int64) error {
+			revokedSessionsUserID = userID
+			return nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/42/deactivate", cookie, nil)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if deactivatedID != 42 {
+		t.Errorf("DeactivateUser called with %d, want 42", deactivatedID)
+	}
+	if revokedSessionsUserID != 42 {
+		t.Errorf("RevokeAllSessionsForUser called with %d, want 42", revokedSessionsUserID)
+	}
+}
+
+func TestHandleDeactivateUser_CannotDeactivateSelf(t *testing.T) {
+	q := &dbfake.Querier{
+		DeactivateUserFunc: func(ctx context.Context, id int64) (db.User, error) {
+			t.Fatal("should not deactivate when the target is the caller")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/7/deactivate", cookie, nil)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleDeactivateUser_NotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		DeactivateUserFunc: func(ctx context.Context, id int64) (db.User, error) {
+			return db.User{}, pgx.ErrNoRows
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/999/deactivate", cookie, nil)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleDeactivateUser_RequiresPlatformAdmin(t *testing.T) {
+	q := &dbfake.Querier{
+		DeactivateUserFunc: func(ctx context.Context, id int64) (db.User, error) {
+			t.Fatal("DeactivateUser should not be called when the caller isn't a platform admin")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, false)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/42/deactivate", cookie, nil)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}

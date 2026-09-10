@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AdminUsers from './AdminUsers'
 import { renderWithProviders } from './test/renderWithProviders'
-import type { AdminUser, CreateUserResult, ResendInviteResult } from './api'
+import type { AdminUser, CreateUserResult, LoginResponse, ResendInviteResult } from './api'
 
-const { listUsers, createUser, resendInvite } = vi.hoisted(() => ({
+const { listUsers, createUser, resendInvite, getMe, deactivateUser } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
   resendInvite: vi.fn(),
+  getMe: vi.fn(),
+  deactivateUser: vi.fn(),
 }))
 
 vi.mock('./api', async (importOriginal) => ({
@@ -16,7 +18,14 @@ vi.mock('./api', async (importOriginal) => ({
   listUsers,
   createUser,
   resendInvite,
+  getMe,
+  deactivateUser,
 }))
+
+// A caller distinct from every test fixture user below, so "this is my
+// own row" behavior doesn't interfere with tests that aren't exercising
+// it -- the "caller's own row" case is exercised explicitly further down.
+const caller = { id: 99, email: 'caller@example.edu', first_name: 'Caller', last_name: 'Admin', is_platform_admin: true }
 
 const activeUser: AdminUser = {
   id: 1,
@@ -45,6 +54,10 @@ const deactivatedUser: AdminUser = {
   has_password: false,
   deactivated: true,
 }
+
+beforeEach(() => {
+  getMe.mockResolvedValue({ user: caller } satisfies LoginResponse)
+})
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -147,5 +160,62 @@ describe('AdminUsers resend invite', () => {
     await typeUser.click(await screen.findByRole('button', { name: 'Resend invite' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('failed again')
+  })
+})
+
+describe('AdminUsers deactivate action', () => {
+  it('does not offer Deactivate on the caller\'s own row', async () => {
+    listUsers.mockResolvedValue([{ ...activeUser, id: caller.id, email: caller.email }])
+
+    renderWithProviders(<AdminUsers />)
+
+    const row = await screen.findByText(caller.email)
+    expect(within(row.closest('tr')!).queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+  })
+
+  it('does not offer Deactivate on an already-deactivated row', async () => {
+    listUsers.mockResolvedValue([deactivatedUser])
+
+    renderWithProviders(<AdminUsers />)
+
+    const row = await screen.findByText(deactivatedUser.email)
+    expect(within(row.closest('tr')!).queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+  })
+
+  it('deactivates a user after confirming, and refreshes the roster', async () => {
+    listUsers.mockResolvedValue([activeUser])
+    deactivateUser.mockResolvedValue(undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Deactivate' }))
+
+    expect(window.confirm).toHaveBeenCalled()
+    await waitFor(() => expect(deactivateUser).toHaveBeenCalledWith(activeUser.id))
+    await waitFor(() => expect(listUsers).toHaveBeenCalledTimes(2))
+  })
+
+  it('does not deactivate when the confirmation is declined', async () => {
+    listUsers.mockResolvedValue([activeUser])
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Deactivate' }))
+
+    expect(deactivateUser).not.toHaveBeenCalled()
+  })
+
+  it('shows a notice when deactivation fails', async () => {
+    listUsers.mockResolvedValue([activeUser])
+    deactivateUser.mockRejectedValue(new Error('boom'))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Deactivate' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Failed to deactivate user.')
   })
 })

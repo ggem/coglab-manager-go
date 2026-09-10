@@ -34,3 +34,9 @@ update users set is_platform_admin = sqlc.arg(is_platform_admin) where id = sqlc
 
 -- name: ListUsers :many
 select * from users order by created_at;
+
+-- name: DeactivateUser :one
+-- :one (RETURNING), not :exec, so deactivating a nonexistent id 404s
+-- instead of silently reporting success -- same reasoning as
+-- RemoveLabMembership.
+update users set deactivated_at = now() where id = sqlc.arg(id) returning *;

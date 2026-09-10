@@ -1,12 +1,26 @@
 import { useState, type SubmitEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createUser, errorMessage, listUsers, resendInvite, type CreateUserInput } from './api'
+import {
+  createUser,
+  deactivateUser,
+  errorMessage,
+  getMe,
+  listUsers,
+  resendInvite,
+  type CreateUserInput,
+} from './api'
 
 const usersQueryKey = ['admin-users']
 
 export default function AdminUsers() {
   const queryClient = useQueryClient()
   const { data: users, isLoading, error } = useQuery({ queryKey: usersQueryKey, queryFn: listUsers })
+  // ['me'] is already fetched (and cached) by App.tsx for the whole
+  // session -- this dedupes against that fetch rather than a second
+  // request, same pattern LabMembers.tsx uses. Needed only to hide the
+  // deactivate action on the caller's own row (the server also refuses
+  // it, this just avoids offering a button that would 400).
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe })
 
   const [values, setValues] = useState<CreateUserInput>({
     email: '',
@@ -36,6 +50,21 @@ export default function AdminUsers() {
     },
     onError: (err) => setNotice(errorMessage(err, 'Failed to resend invite.')),
   })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (userId: number) => deactivateUser(userId),
+    onSuccess: () => {
+      setNotice(null)
+      void queryClient.invalidateQueries({ queryKey: usersQueryKey })
+    },
+    onError: (err) => setNotice(errorMessage(err, 'Failed to deactivate user.')),
+  })
+
+  function handleDeactivate(userId: number, email: string) {
+    if (window.confirm(`Deactivate ${email}? They will be signed out immediately and won't be able to log in again.`)) {
+      deactivateMutation.mutate(userId)
+    }
+  }
 
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -74,7 +103,7 @@ export default function AdminUsers() {
               <td>{u.email}</td>
               <td>{u.is_platform_admin ? 'Yes' : ''}</td>
               <td>{u.deactivated ? 'Deactivated' : u.has_password ? 'Active' : 'Invite pending'}</td>
-              <td>
+              <td className="lookup-table-actions">
                 {!u.deactivated && !u.has_password && (
                   <button
                     type="button"
@@ -82,6 +111,15 @@ export default function AdminUsers() {
                     disabled={resendMutation.isPending}
                   >
                     Resend invite
+                  </button>
+                )}
+                {u.id !== me?.user.id && !u.deactivated && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeactivate(u.id, u.email)}
+                    disabled={deactivateMutation.isPending}
+                  >
+                    Deactivate
                   </button>
                 )}
               </td>

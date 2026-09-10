@@ -16,19 +16,21 @@ import (
 // with a clear message, so a test exercising a code path it didn't expect
 // fails loudly instead of returning a silent zero value.
 type Querier struct {
-	CreateUserFunc            func(ctx context.Context, arg db.CreateUserParams) (db.User, error)
-	GetUserByEmailFunc        func(ctx context.Context, email string) (db.User, error)
-	GetUserByIDFunc           func(ctx context.Context, id int64) (db.User, error)
-	GetUserBySSOIdentityFunc  func(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error)
-	SetUserSSOIdentityFunc    func(ctx context.Context, arg db.SetUserSSOIdentityParams) error
-	SetUserPasswordFunc       func(ctx context.Context, arg db.SetUserPasswordParams) error
-	SetUserPlatformAdminFunc  func(ctx context.Context, arg db.SetUserPlatformAdminParams) error
-	ListUsersFunc             func(ctx context.Context) ([]db.User, error)
-	CreateSessionFunc         func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error)
-	GetSessionByTokenHashFunc func(ctx context.Context, tokenHash []byte) (db.Session, error)
-	RevokeSessionFunc         func(ctx context.Context, tokenHash []byte) error
-	TouchSessionLastSeenFunc  func(ctx context.Context, id int64) error
-	CreateAuditEventFunc      func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error)
+	CreateUserFunc               func(ctx context.Context, arg db.CreateUserParams) (db.User, error)
+	GetUserByEmailFunc           func(ctx context.Context, email string) (db.User, error)
+	GetUserByIDFunc              func(ctx context.Context, id int64) (db.User, error)
+	GetUserBySSOIdentityFunc     func(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error)
+	SetUserSSOIdentityFunc       func(ctx context.Context, arg db.SetUserSSOIdentityParams) error
+	SetUserPasswordFunc          func(ctx context.Context, arg db.SetUserPasswordParams) error
+	SetUserPlatformAdminFunc     func(ctx context.Context, arg db.SetUserPlatformAdminParams) error
+	ListUsersFunc                func(ctx context.Context) ([]db.User, error)
+	DeactivateUserFunc           func(ctx context.Context, id int64) (db.User, error)
+	CreateSessionFunc            func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error)
+	GetSessionByTokenHashFunc    func(ctx context.Context, tokenHash []byte) (db.Session, error)
+	RevokeSessionFunc            func(ctx context.Context, tokenHash []byte) error
+	RevokeAllSessionsForUserFunc func(ctx context.Context, userID int64) error
+	TouchSessionLastSeenFunc     func(ctx context.Context, id int64) error
+	CreateAuditEventFunc         func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error)
 
 	CreatePasswordSetTokenFunc func(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error)
 	ClaimPasswordSetTokenFunc  func(ctx context.Context, tokenHash []byte) (db.PasswordSetToken, error)
@@ -265,6 +267,13 @@ func (q *Querier) ListUsers(ctx context.Context) ([]db.User, error) {
 	return q.ListUsersFunc(ctx)
 }
 
+func (q *Querier) DeactivateUser(ctx context.Context, id int64) (db.User, error) {
+	if q.DeactivateUserFunc == nil {
+		panic("dbfake: DeactivateUser not implemented")
+	}
+	return q.DeactivateUserFunc(ctx, id)
+}
+
 func (q *Querier) CreatePasswordSetToken(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error) {
 	if q.CreatePasswordSetTokenFunc == nil {
 		panic("dbfake: CreatePasswordSetToken not implemented")
@@ -298,6 +307,13 @@ func (q *Querier) RevokeSession(ctx context.Context, tokenHash []byte) error {
 		panic("dbfake: RevokeSession not implemented")
 	}
 	return q.RevokeSessionFunc(ctx, tokenHash)
+}
+
+func (q *Querier) RevokeAllSessionsForUser(ctx context.Context, userID int64) error {
+	if q.RevokeAllSessionsForUserFunc == nil {
+		panic("dbfake: RevokeAllSessionsForUser not implemented")
+	}
+	return q.RevokeAllSessionsForUserFunc(ctx, userID)
 }
 
 func (q *Querier) TouchSessionLastSeen(ctx context.Context, id int64) error {
