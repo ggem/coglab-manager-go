@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 // The Go API has no /api prefix (see internal/httpapi/server.go), so the
 // dev proxy forwards each of its top-level route prefixes individually
@@ -53,5 +53,9 @@ export default defineConfig({
         bypass: (req) => (req.method === 'POST' ? undefined : req.url),
       },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
