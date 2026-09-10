@@ -62,6 +62,30 @@ func (s *Server) requireLabAdmin(w http.ResponseWriter, r *http.Request, labID i
 	return true
 }
 
+// requirePlatformAdmin gates the system-wide (not lab-scoped) admin
+// routes -- creating a user account with no lab in view yet, listing
+// every user in the system. Same 403 convention as requireLabAdmin: the
+// caller is authenticated, this is a real "you lack this privilege"
+// response, not something to hide behind a 404.
+func (s *Server) requirePlatformAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireCurrentUserID(w, r)
+		if !ok {
+			return
+		}
+		user, err := s.queries.GetUserByID(r.Context(), userID)
+		if err != nil {
+			s.writeDBError(w, err)
+			return
+		}
+		if !user.IsPlatformAdmin {
+			writeError(w, http.StatusForbidden, "platform admin permission required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireLabAdminFromURL gates the lab-membership *management* routes
 // (add/edit/remove a membership, search candidates to add) -- unlike
 // requireLabMemberFromURL's plain membership check, these actions can

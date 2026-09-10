@@ -16,6 +16,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
+	"github.com/ggem/coglab-manager-go/internal/mail/mailfake"
 	"github.com/ggem/coglab-manager-go/internal/mcdi/mcdifake"
 )
 
@@ -39,7 +40,7 @@ func newTestServerWithMCDI(q *dbfake.Querier, mcdiClient *mcdifake.Client) *Serv
 	// beginner is nil -- see txBeginner's doc comment in server.go for why
 	// dbfake-backed tests don't need a real transaction to exercise
 	// handler logic and error handling.
-	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, nil, mcdiClient, discardLogger(), nil)
+	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, nil, mcdiClient, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 }
 
 func postJSON(t *testing.T, s *Server, path string, body any) *httptest.ResponseRecorder {

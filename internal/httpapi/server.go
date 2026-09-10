@@ -17,6 +17,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/audit"
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
+	"github.com/ggem/coglab-manager-go/internal/mail"
 	"github.com/ggem/coglab-manager-go/internal/mcdi"
 )
 
@@ -36,6 +37,11 @@ import (
 // email/password login keeps working either way, and Routes only
 // registers the /auth/sso/* endpoints when oidc is non-nil, rather than
 // registering them unconditionally and having them fail at request time.
+//
+// mailer and appBaseURL back the account-creation invite email (a newly
+// created user's password_hash is nil until they redeem the link) --
+// unlike oidc, both are required rather than optional, the same
+// fail-fast-at-startup convention cmd/api already applies to MCDI/SMTP.
 type Server struct {
 	authenticator auth.LocalAuthenticator
 	sessions      *auth.SessionManager
@@ -45,6 +51,8 @@ type Server struct {
 	mcdiClient    mcdi.Client
 	logger        *slog.Logger
 	oidc          auth.SSOAuthenticator
+	mailer        mail.Sender
+	appBaseURL    string
 }
 
 // txBeginner is satisfied by *pgxpool.Pool (wired in cmd/api/main.go) and
@@ -58,7 +66,7 @@ type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, beginner txBeginner, mcdiClient mcdi.Client, logger *slog.Logger, oidc auth.SSOAuthenticator) *Server {
+func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionManager, recorder *audit.Recorder, queries db.Querier, beginner txBeginner, mcdiClient mcdi.Client, logger *slog.Logger, oidc auth.SSOAuthenticator, mailer mail.Sender, appBaseURL string) *Server {
 	return &Server{
 		authenticator: authenticator,
 		sessions:      sessions,
@@ -68,6 +76,8 @@ func NewServer(authenticator auth.LocalAuthenticator, sessions *auth.SessionMana
 		mcdiClient:    mcdiClient,
 		logger:        logger,
 		oidc:          oidc,
+		mailer:        mailer,
+		appBaseURL:    appBaseURL,
 	}
 }
 
@@ -95,6 +105,7 @@ func (s *Server) Routes() http.Handler {
 
 	r.Get("/healthz", s.handleHealthz)
 	r.Post("/login", s.handleLogin)
+	r.Post("/set-password", s.handleSetPassword)
 	r.Get("/auth/sso/config", s.handleSSOConfig)
 	// Only registered when SSO is actually configured (s.oidc != nil) --
 	// see Server's doc comment. A deployment with no institutional IdP
@@ -112,6 +123,13 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/me", s.handleMe)
 		r.Get("/labs", s.handleListMyLabs)
 		r.Get("/roles", s.handleListRoles)
+
+		r.Route("/admin/users", func(r chi.Router) {
+			r.Use(s.requirePlatformAdmin)
+			r.Get("/", s.handleListUsers)
+			r.Post("/", s.handleCreateUser)
+			r.Post("/{userID}/resend-invite", s.handleResendInvite)
+		})
 
 		r.Route("/recruitment-sources", func(r chi.Router) {
 			r.Post("/", s.handleCreateRecruitmentSource)
@@ -177,6 +195,7 @@ func (s *Server) Routes() http.Handler {
 			r.Route("/memberships", func(r chi.Router) {
 				r.Get("/", s.handleListLabMemberships)
 				r.With(s.requireLabAdminFromURL).Post("/", s.handleCreateLabMembership)
+				r.With(s.requireLabAdminFromURL).Post("/new-user", s.handleCreateLabMembershipForNewUser)
 				r.With(s.requireLabAdminFromURL).Get("/search", s.handleSearchUsersNotInLab)
 				r.Route("/{userID}", func(r chi.Router) {
 					r.With(s.requireLabAdminFromURL).Put("/", s.handleUpdateLabMembership)

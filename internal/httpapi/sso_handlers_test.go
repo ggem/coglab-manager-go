@@ -10,6 +10,7 @@ import (
 	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
+	"github.com/ggem/coglab-manager-go/internal/mail/mailfake"
 )
 
 // fakeSSOAuthenticator is a test double for auth.SSOAuthenticator -- it lets
@@ -38,7 +39,7 @@ func (f *fakeSSOAuthenticator) Exchange(ctx context.Context, code, expectedNonce
 }
 
 func newSSOTestServer(q *dbfake.Querier, oidc auth.SSOAuthenticator) *Server {
-	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, nil, nil, discardLogger(), oidc)
+	return NewServer(auth.NewPasswordAuthenticator(q), auth.NewSessionManager(q, false), audit.NewRecorder(q), q, nil, nil, discardLogger(), oidc, &mailfake.Sender{}, "http://localhost:5173")
 }
 
 func TestHandleSSOConfig_Disabled(t *testing.T) {

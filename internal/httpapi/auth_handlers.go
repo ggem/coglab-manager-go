@@ -14,10 +14,11 @@ type loginRequest struct {
 }
 
 type userResponse struct {
-	ID        int64  `json:"id"`
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	ID              int64  `json:"id"`
+	Email           string `json:"email"`
+	FirstName       string `json:"first_name"`
+	LastName        string `json:"last_name"`
+	IsPlatformAdmin bool   `json:"is_platform_admin"`
 }
 
 type loginResponse struct {
@@ -54,10 +55,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, loginResponse{User: userResponse{
-		ID:        identity.UserID,
-		Email:     identity.Email,
-		FirstName: identity.FirstName,
-		LastName:  identity.LastName,
+		ID:              identity.UserID,
+		Email:           identity.Email,
+		FirstName:       identity.FirstName,
+		LastName:        identity.LastName,
+		IsPlatformAdmin: identity.IsPlatformAdmin,
 	}})
 }
 
@@ -105,10 +107,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, loginResponse{User: userResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
+		ID:              user.ID,
+		Email:           user.Email,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		IsPlatformAdmin: user.IsPlatformAdmin,
 	}})
 }
 

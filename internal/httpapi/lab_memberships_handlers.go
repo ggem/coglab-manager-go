@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ggem/coglab-manager-go/internal/audit"
+	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 )
 
@@ -100,6 +101,106 @@ func (s *Server) handleCreateLabMembership(w http.ResponseWriter, r *http.Reques
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type createLabMembershipForNewUserRequest struct {
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	RoleID    int64  `json:"role_id"`
+}
+
+// handleCreateLabMembershipForNewUser is the lab-admin counterpart to
+// handleCreateUser: creates a brand-new account (for someone who's never
+// used the app before, so isn't findable via handleSearchUsersNotInLab)
+// and adds them to this lab in one step. Deliberately does NOT accept an
+// is_platform_admin field -- unlike handleCreateUser, which only a
+// platform admin can reach, a lab admin's authority is scoped to their
+// own lab and must never extend to granting system-wide admin rights.
+// User creation and the membership are one transaction: either both
+// succeed or neither does, so a mid-way failure can't leave an orphaned
+// account with no lab.
+func (s *Server) handleCreateLabMembershipForNewUser(w http.ResponseWriter, r *http.Request) {
+	labID, ok := idParam(w, r, "labID")
+	if !ok {
+		return
+	}
+
+	var req createLabMembershipForNewUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Email == "" || req.FirstName == "" || req.LastName == "" {
+		writeError(w, http.StatusBadRequest, "email, first_name, and last_name are required")
+		return
+	}
+
+	var user db.User
+	var token string
+	txErr := s.withTx(r.Context(), func(q db.Querier) error {
+		var err error
+		user, err = q.CreateUser(r.Context(), db.CreateUserParams{
+			Email:           req.Email,
+			FirstName:       req.FirstName,
+			LastName:        req.LastName,
+			PasswordHash:    nil,
+			IsPlatformAdmin: false,
+		})
+		if err != nil {
+			return err
+		}
+
+		membership, err := q.CreateLabMembership(r.Context(), db.CreateLabMembershipParams{
+			UserID: user.ID,
+			LabID:  labID,
+			RoleID: req.RoleID,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Also inside the transaction, same reasoning as
+		// handleCreateUser: a token-creation failure here rolls back the
+		// user and membership too, so the caller can just retry the
+		// identical request instead of being stuck on a unique-email
+		// conflict with an orphaned, un-invitable account.
+		token, err = auth.CreateInviteToken(r.Context(), q, user.ID)
+		if err != nil {
+			return err
+		}
+
+		recorder := audit.NewRecorder(q)
+		if err := recorder.Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			LabID:       &labID,
+			Action:      auth.ActionUserCreated,
+			EntityType:  ptr("user"),
+			EntityID:    &user.ID,
+			Metadata:    map[string]any{"email": user.Email},
+		}); err != nil {
+			return err
+		}
+		return recorder.Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			LabID:       &labID,
+			Action:      ActionLabMembershipCreated,
+			EntityType:  ptr("lab_membership"),
+			EntityID:    &membership.ID,
+			Metadata:    map[string]int64{"user_id": user.ID, "role_id": req.RoleID},
+		})
+	})
+	if txErr != nil {
+		s.writeDBError(w, txErr)
+		return
+	}
+
+	sent := s.sendInviteEmail(r.Context(), user, token)
+
+	writeJSON(w, http.StatusCreated, createdLabMemberResponse{
+		searchedUserResponse{ID: user.ID, FirstName: user.FirstName, LastName: user.LastName, Email: user.Email},
+		sent,
+	})
 }
 
 type updateLabMembershipRequest struct {
@@ -206,6 +307,16 @@ type searchedUserResponse struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Email     string `json:"email"`
+}
+
+// createdLabMemberResponse is handleCreateLabMembershipForNewUser's
+// response -- same invite_email_sent rationale as handleCreateUser's
+// createUserResponse: a bare searchedUserResponse can't tell the caller
+// whether the person will actually receive a way to activate the
+// account it just created.
+type createdLabMemberResponse struct {
+	searchedUserResponse
+	InviteEmailSent bool `json:"invite_email_sent"`
 }
 
 // handleSearchUsersNotInLab is the candidate pool for "add an existing

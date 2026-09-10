@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -127,6 +128,86 @@ func TestLoginLogoutFlow_Integration(t *testing.T) {
 	}
 }
 
+// TestSetPasswordFlow_ConcurrentRedemption_Integration proves the invite
+// token can't be redeemed twice even when two requests race for it --
+// this needs real Postgres (unlike the dbfake-backed unit tests) since
+// it's exercising ClaimPasswordSetToken's row-level locking under an
+// actual concurrent transaction, not something a fake Querier can model.
+// Before the atomic claim (a plain SELECT of used_at followed by a
+// separate UPDATE), both requests could observe used_at is null and both
+// proceed, each setting a different password with neither erroring.
+func TestSetPasswordFlow_ConcurrentRedemption_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	email := fmt.Sprintf("integration-concurrent-%d@example.edu", time.Now().UnixNano())
+	user, err := testQueries.CreateUser(ctx, db.CreateUserParams{
+		Email:     email,
+		FirstName: "Concurrent",
+		LastName:  "Redeemer",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	token, err := auth.CreateInviteToken(ctx, testQueries, user.ID)
+	if err != nil {
+		t.Fatalf("CreateInviteToken: %v", err)
+	}
+
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
+
+	passwords := []string{"first-attempt-password", "second-attempt-password"}
+	codes := make([]int, len(passwords))
+	var wg sync.WaitGroup
+	for i, password := range passwords {
+		wg.Add(1)
+		go func(i int, password string) {
+			defer wg.Done()
+			rec := postJSON(t, s, "/set-password", setPasswordRequest{Token: token, Password: password})
+			codes[i] = rec.Code
+		}(i, password)
+	}
+	wg.Wait()
+
+	successes, failures := 0, 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusOK:
+			successes++
+		case http.StatusBadRequest:
+			failures++
+		default:
+			t.Errorf("unexpected status %d", code)
+		}
+	}
+	if successes != 1 || failures != 1 {
+		t.Fatalf("codes = %v, want exactly one 200 and one 400", codes)
+	}
+
+	updated, err := testQueries.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if updated.PasswordHash == nil {
+		t.Fatal("password_hash is nil, want it set by whichever request won the race")
+	}
+	matchedFirst := auth.VerifyPassword(*updated.PasswordHash, passwords[0]) == nil
+	matchedSecond := auth.VerifyPassword(*updated.PasswordHash, passwords[1]) == nil
+	if matchedFirst == matchedSecond {
+		t.Fatalf("stored password matches first=%v second=%v, want exactly one", matchedFirst, matchedSecond)
+	}
+
+	// A single session was issued (by the winner) -- the loser's request
+	// never got far enough to call sessions.Issue.
+	var sessionCount int
+	if err := testPool.QueryRow(ctx, "select count(*) from sessions where user_id = $1", user.ID).Scan(&sessionCount); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if sessionCount != 1 {
+		t.Errorf("session count for user = %d, want 1", sessionCount)
+	}
+}
+
 // TestExperimentsFlow_Integration exercises the experiments domain's HTTP
 // layer against real Postgres: unlike the dbfake-backed unit tests, this
 // catches mistakes in the generated SQL and route wiring that a fake
@@ -167,7 +248,7 @@ func TestExperimentsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -401,7 +482,7 @@ func TestSchedulingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -661,7 +742,7 @@ func TestSchedulingFlow_PriorityOrdering_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership(undergrad): %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -818,7 +899,7 @@ func TestSchedulingFlow_DedicatedGreeter_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1018,7 +1099,7 @@ func TestDeactivateExperimentRole_ClearsSitterAndGreeterRoles_Integration(t *tes
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1175,7 +1256,7 @@ func TestLabMembershipsFlow_Integration(t *testing.T) {
 		t.Fatalf("insert experiment_role: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1389,7 +1470,7 @@ func TestLabMembershipsFlow_RequiresAdmin_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership(other): %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1517,7 +1598,7 @@ func TestMatchingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1728,7 +1809,7 @@ func TestReportingFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -1927,7 +2008,7 @@ func TestNewsletterExportFlow_Integration(t *testing.T) {
 		t.Fatalf("insert lab_membership: %v", err)
 	}
 
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, &mcdifake.Client{}, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -2299,7 +2380,7 @@ func TestRequestMCDIFlow_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {
@@ -2374,7 +2455,7 @@ func TestRequestMCDIFlow_NoGuardianEmail_Integration(t *testing.T) {
 	}
 
 	mcdiClient := &mcdifake.Client{}
-	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil)
+	s := NewServer(auth.NewPasswordAuthenticator(testQueries), auth.NewSessionManager(testQueries, false), audit.NewRecorder(testQueries), testQueries, testPool, mcdiClient, discardLogger(), nil, &mailfake.Sender{}, "http://localhost:5173")
 
 	loginRec := postJSON(t, s, "/login", loginRequest{Email: actor.Email, Password: "s3cret-integration-test"})
 	if loginRec.Code != http.StatusOK {

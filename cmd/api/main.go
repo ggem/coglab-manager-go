@@ -65,6 +65,15 @@ func run() error {
 		return err
 	}
 
+	mailer, err := newMailer()
+	if err != nil {
+		return err
+	}
+	baseURL, err := appBaseURL()
+	if err != nil {
+		return err
+	}
+
 	server := httpapi.NewServer(
 		auth.NewPasswordAuthenticator(queries),
 		auth.NewSessionManager(queries, secureCookies()),
@@ -74,6 +83,8 @@ func run() error {
 		mcdiClient,
 		logger,
 		oidcAuthenticator,
+		mailer,
+		baseURL,
 	)
 
 	srv := &http.Server{
@@ -82,10 +93,6 @@ func run() error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	mailer, err := newMailer()
-	if err != nil {
-		return err
-	}
 	leadTime, err := familyReminderLeadTime()
 	if err != nil {
 		return err
@@ -232,4 +239,17 @@ func addr() string {
 // development over plain HTTP.
 func secureCookies() bool {
 	return os.Getenv("SECURE_COOKIES") != "false"
+}
+
+// appBaseURL is the frontend's public origin, required the same way
+// SMTP_ADDR/SMTP_FROM are -- it's the only way httpapi's account-creation
+// invite email knows what to build a /set-password?token=... link against,
+// since the API itself has no idea what origin the frontend is served
+// from.
+func appBaseURL() (string, error) {
+	url := os.Getenv("APP_BASE_URL")
+	if url == "" {
+		return "", fmt.Errorf("APP_BASE_URL environment variable is required")
+	}
+	return url, nil
 }
