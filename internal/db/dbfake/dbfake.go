@@ -22,7 +22,7 @@ type Querier struct {
 	GetUserBySSOIdentityFunc     func(ctx context.Context, arg db.GetUserBySSOIdentityParams) (db.User, error)
 	SetUserSSOIdentityFunc       func(ctx context.Context, arg db.SetUserSSOIdentityParams) error
 	SetUserPasswordFunc          func(ctx context.Context, arg db.SetUserPasswordParams) error
-	SetUserPlatformAdminFunc     func(ctx context.Context, arg db.SetUserPlatformAdminParams) error
+	SetUserPlatformAdminFunc     func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error)
 	ListUsersFunc                func(ctx context.Context) ([]db.User, error)
 	DeactivateUserFunc           func(ctx context.Context, id int64) (db.User, error)
 	CreateSessionFunc            func(ctx context.Context, arg db.CreateSessionParams) (db.Session, error)
@@ -253,7 +253,7 @@ func (q *Querier) SetUserPassword(ctx context.Context, arg db.SetUserPasswordPar
 	return q.SetUserPasswordFunc(ctx, arg)
 }
 
-func (q *Querier) SetUserPlatformAdmin(ctx context.Context, arg db.SetUserPlatformAdminParams) error {
+func (q *Querier) SetUserPlatformAdmin(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
 	if q.SetUserPlatformAdminFunc == nil {
 		panic("dbfake: SetUserPlatformAdmin not implemented")
 	}

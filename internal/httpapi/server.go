@@ -130,6 +130,7 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/", s.handleCreateUser)
 			r.Post("/{userID}/resend-invite", s.handleResendInvite)
 			r.Post("/{userID}/deactivate", s.handleDeactivateUser)
+			r.Post("/{userID}/platform-admin", s.handleSetPlatformAdmin)
 		})
 
 		r.Route("/recruitment-sources", func(r chi.Router) {

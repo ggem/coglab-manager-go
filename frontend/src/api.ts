@@ -169,6 +169,16 @@ export function deactivateUser(userId: number): Promise<void> {
   })
 }
 
+// Grants or revokes platform-admin on an existing account -- createUser
+// only covers granting it at creation time. Rejected by the server (400)
+// if userId is the caller's own account.
+export function setPlatformAdmin(userId: number, isPlatformAdmin: boolean): Promise<void> {
+  return apiFetch<void>(`/admin/users/${userId}/platform-admin`, {
+    method: 'POST',
+    body: JSON.stringify({ is_platform_admin: isPlatformAdmin }),
+  })
+}
+
 export interface CreateLabMembershipForNewUserInput {
   email: string
   first_name: string

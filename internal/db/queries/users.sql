@@ -29,8 +29,10 @@ update users set sso_issuer = sqlc.arg(sso_issuer), sso_subject = sqlc.arg(sso_s
 -- name: SetUserPassword :exec
 update users set password_hash = sqlc.arg(password_hash) where id = sqlc.arg(id);
 
--- name: SetUserPlatformAdmin :exec
-update users set is_platform_admin = sqlc.arg(is_platform_admin) where id = sqlc.arg(id);
+-- name: SetUserPlatformAdmin :one
+-- :one (RETURNING), not :exec, so granting/revoking admin on a
+-- nonexistent id 404s instead of silently reporting success.
+update users set is_platform_admin = sqlc.arg(is_platform_admin) where id = sqlc.arg(id) returning *;
 
 -- name: ListUsers :many
 select * from users order by created_at;

@@ -7,6 +7,7 @@ import {
   getMe,
   listUsers,
   resendInvite,
+  setPlatformAdmin,
   type CreateUserInput,
 } from './api'
 
@@ -18,8 +19,9 @@ export default function AdminUsers() {
   // ['me'] is already fetched (and cached) by App.tsx for the whole
   // session -- this dedupes against that fetch rather than a second
   // request, same pattern LabMembers.tsx uses. Needed only to hide the
-  // deactivate action on the caller's own row (the server also refuses
-  // it, this just avoids offering a button that would 400).
+  // deactivate/platform-admin actions on the caller's own row (the
+  // server also refuses those, this just avoids offering a button that
+  // would 400).
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe })
 
   const [values, setValues] = useState<CreateUserInput>({
@@ -58,6 +60,15 @@ export default function AdminUsers() {
       void queryClient.invalidateQueries({ queryKey: usersQueryKey })
     },
     onError: (err) => setNotice(errorMessage(err, 'Failed to deactivate user.')),
+  })
+
+  const platformAdminMutation = useMutation({
+    mutationFn: ({ userId, grant }: { userId: number; grant: boolean }) => setPlatformAdmin(userId, grant),
+    onSuccess: () => {
+      setNotice(null)
+      void queryClient.invalidateQueries({ queryKey: usersQueryKey })
+    },
+    onError: (err) => setNotice(errorMessage(err, 'Failed to change platform-admin status.')),
   })
 
   function handleDeactivate(userId: number, email: string) {
@@ -113,14 +124,29 @@ export default function AdminUsers() {
                     Resend invite
                   </button>
                 )}
-                {u.id !== me?.user.id && !u.deactivated && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeactivate(u.id, u.email)}
-                    disabled={deactivateMutation.isPending}
-                  >
-                    Deactivate
-                  </button>
+                {u.id !== me?.user.id && (
+                  <>
+                    {!u.deactivated && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          platformAdminMutation.mutate({ userId: u.id, grant: !u.is_platform_admin })
+                        }
+                        disabled={platformAdminMutation.isPending}
+                      >
+                        {u.is_platform_admin ? 'Revoke platform admin' : 'Grant platform admin'}
+                      </button>
+                    )}
+                    {!u.deactivated && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeactivate(u.id, u.email)}
+                        disabled={deactivateMutation.isPending}
+                      >
+                        Deactivate
+                      </button>
+                    )}
+                  </>
                 )}
               </td>
             </tr>

@@ -4,10 +4,12 @@ package auth
 // in the audit package, since audit only knows how to store an event, not
 // what any particular action means.
 const (
-	ActionLoginSucceeded  = "user.login_succeeded"
-	ActionLoginFailed     = "user.login_failed"
-	ActionLogout          = "user.logout"
-	ActionUserCreated     = "user.created"
-	ActionPasswordSet     = "user.password_set"
-	ActionUserDeactivated = "user.deactivated"
+	ActionLoginSucceeded           = "user.login_succeeded"
+	ActionLoginFailed              = "user.login_failed"
+	ActionLogout                   = "user.logout"
+	ActionUserCreated              = "user.created"
+	ActionPasswordSet              = "user.password_set"
+	ActionUserDeactivated          = "user.deactivated"
+	ActionUserPlatformAdminGranted = "user.platform_admin_granted"
+	ActionUserPlatformAdminRevoked = "user.platform_admin_revoked"
 )

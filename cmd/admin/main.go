@@ -97,7 +97,7 @@ func run() error {
 		return nil
 	}
 
-	if err := queries.SetUserPlatformAdmin(ctx, db.SetUserPlatformAdminParams{ID: user.ID, IsPlatformAdmin: true}); err != nil {
+	if _, err := queries.SetUserPlatformAdmin(ctx, db.SetUserPlatformAdminParams{ID: user.ID, IsPlatformAdmin: true}); err != nil {
 		return fmt.Errorf("promote user: %w", err)
 	}
 	if err := queries.SetUserPassword(ctx, db.SetUserPasswordParams{ID: user.ID, PasswordHash: &hash}); err != nil {

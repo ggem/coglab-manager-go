@@ -221,6 +221,59 @@ func (s *Server) handleDeactivateUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type setPlatformAdminRequest struct {
+	IsPlatformAdmin bool `json:"is_platform_admin"`
+}
+
+// handleSetPlatformAdmin grants or revokes platform-admin on an
+// *existing* account -- handleCreateUser only covers granting it at
+// creation time. Same self-target guard as handleDeactivateUser and for
+// the same reason: revoking your own admin access by accident (or
+// granting it, which is at least harmless) is a foot-gun with no
+// legitimate use here, since another admin (or cmd/admin) can always do
+// it instead.
+func (s *Server) handleSetPlatformAdmin(w http.ResponseWriter, r *http.Request) {
+	userID, ok := idParam(w, r, "userID")
+	if !ok {
+		return
+	}
+	callerID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return
+	}
+	if userID == callerID {
+		writeError(w, http.StatusBadRequest, "cannot change your own platform-admin status")
+		return
+	}
+
+	var req setPlatformAdminRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if _, err := s.queries.SetUserPlatformAdmin(r.Context(), db.SetUserPlatformAdminParams{
+		ID:              userID,
+		IsPlatformAdmin: req.IsPlatformAdmin,
+	}); err != nil {
+		s.writeDBError(w, err)
+		return
+	}
+
+	action := auth.ActionUserPlatformAdminRevoked
+	if req.IsPlatformAdmin {
+		action = auth.ActionUserPlatformAdminGranted
+	}
+	s.recordAuditEvent(r, audit.Event{
+		ActorUserID: &callerID,
+		Action:      action,
+		EntityType:  ptr("user"),
+		EntityID:    &userID,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // sendInviteEmail emails a password-set link for token, which the caller
 // has already generated (and, for a fresh account, committed alongside
 // the user row -- see handleCreateUser). This is deliberately the only

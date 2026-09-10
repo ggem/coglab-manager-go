@@ -568,3 +568,101 @@ func TestHandleDeactivateUser_RequiresPlatformAdmin(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }
+
+func TestHandleSetPlatformAdmin_Grant(t *testing.T) {
+	var captured db.SetUserPlatformAdminParams
+	q := &dbfake.Querier{
+		SetUserPlatformAdminFunc: func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
+			captured = arg
+			return db.User{ID: arg.ID, IsPlatformAdmin: arg.IsPlatformAdmin}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/42/platform-admin", cookie, setPlatformAdminRequest{IsPlatformAdmin: true})
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ID != 42 || !captured.IsPlatformAdmin {
+		t.Errorf("SetUserPlatformAdmin params = %+v, want ID=42 IsPlatformAdmin=true", captured)
+	}
+}
+
+func TestHandleSetPlatformAdmin_Revoke(t *testing.T) {
+	var captured db.SetUserPlatformAdminParams
+	q := &dbfake.Querier{
+		SetUserPlatformAdminFunc: func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
+			captured = arg
+			return db.User{ID: arg.ID, IsPlatformAdmin: arg.IsPlatformAdmin}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/42/platform-admin", cookie, setPlatformAdminRequest{IsPlatformAdmin: false})
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNoContent, rec.Body)
+	}
+	if captured.ID != 42 || captured.IsPlatformAdmin {
+		t.Errorf("SetUserPlatformAdmin params = %+v, want ID=42 IsPlatformAdmin=false", captured)
+	}
+}
+
+func TestHandleSetPlatformAdmin_CannotChangeSelf(t *testing.T) {
+	q := &dbfake.Querier{
+		SetUserPlatformAdminFunc: func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
+			t.Fatal("should not change platform-admin status when the target is the caller")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/7/platform-admin", cookie, setPlatformAdminRequest{IsPlatformAdmin: false})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleSetPlatformAdmin_NotFound(t *testing.T) {
+	q := &dbfake.Querier{
+		SetUserPlatformAdminFunc: func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
+			return db.User{}, pgx.ErrNoRows
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/999/platform-admin", cookie, setPlatformAdminRequest{IsPlatformAdmin: true})
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleSetPlatformAdmin_RequiresPlatformAdmin(t *testing.T) {
+	q := &dbfake.Querier{
+		SetUserPlatformAdminFunc: func(ctx context.Context, arg db.SetUserPlatformAdminParams) (db.User, error) {
+			t.Fatal("SetUserPlatformAdmin should not be called when the caller isn't a platform admin")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, false)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/42/platform-admin", cookie, setPlatformAdminRequest{IsPlatformAdmin: true})
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}

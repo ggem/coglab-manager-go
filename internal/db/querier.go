@@ -398,7 +398,9 @@ type Querier interface {
 	// regardless of deactivated status, to clean up any stale flag.
 	SetExperimentRoleSitter(ctx context.Context, arg SetExperimentRoleSitterParams) (ExperimentRole, error)
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
-	SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) error
+	// :one (RETURNING), not :exec, so granting/revoking admin on a
+	// nonexistent id 404s instead of silently reporting success.
+	SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) (User, error)
 	// Backfills the link the first time an existing local-password account
 	// signs in via SSO -- matched by email at that point, not (issuer, sub)
 	// (which didn't exist on the row yet).

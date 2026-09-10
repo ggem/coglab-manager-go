@@ -5,12 +5,13 @@ import AdminUsers from './AdminUsers'
 import { renderWithProviders } from './test/renderWithProviders'
 import type { AdminUser, CreateUserResult, LoginResponse, ResendInviteResult } from './api'
 
-const { listUsers, createUser, resendInvite, getMe, deactivateUser } = vi.hoisted(() => ({
+const { listUsers, createUser, resendInvite, getMe, deactivateUser, setPlatformAdmin } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
   resendInvite: vi.fn(),
   getMe: vi.fn(),
   deactivateUser: vi.fn(),
+  setPlatformAdmin: vi.fn(),
 }))
 
 vi.mock('./api', async (importOriginal) => ({
@@ -20,6 +21,7 @@ vi.mock('./api', async (importOriginal) => ({
   resendInvite,
   getMe,
   deactivateUser,
+  setPlatformAdmin,
 }))
 
 // A caller distinct from every test fixture user below, so "this is my
@@ -217,5 +219,58 @@ describe('AdminUsers deactivate action', () => {
     await typeUser.click(await screen.findByRole('button', { name: 'Deactivate' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Failed to deactivate user.')
+  })
+})
+
+describe('AdminUsers platform-admin action', () => {
+  it('does not offer a platform-admin action on the caller\'s own row', async () => {
+    listUsers.mockResolvedValue([{ ...activeUser, id: caller.id, email: caller.email }])
+
+    renderWithProviders(<AdminUsers />)
+
+    const row = await screen.findByText(caller.email)
+    expect(within(row.closest('tr')!).queryByRole('button', { name: /platform admin/ })).not.toBeInTheDocument()
+  })
+
+  it('does not offer a platform-admin action on an already-deactivated row', async () => {
+    listUsers.mockResolvedValue([deactivatedUser])
+
+    renderWithProviders(<AdminUsers />)
+
+    const row = await screen.findByText(deactivatedUser.email)
+    expect(within(row.closest('tr')!).queryByRole('button', { name: /platform admin/ })).not.toBeInTheDocument()
+  })
+
+  it('grants platform admin to a non-admin user', async () => {
+    listUsers.mockResolvedValue([pendingUser])
+    setPlatformAdmin.mockResolvedValue(undefined)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Grant platform admin' }))
+
+    await waitFor(() => expect(setPlatformAdmin).toHaveBeenCalledWith(pendingUser.id, true))
+  })
+
+  it('revokes platform admin from an admin user', async () => {
+    listUsers.mockResolvedValue([activeUser])
+    setPlatformAdmin.mockResolvedValue(undefined)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Revoke platform admin' }))
+
+    await waitFor(() => expect(setPlatformAdmin).toHaveBeenCalledWith(activeUser.id, false))
+  })
+
+  it('shows a notice when changing platform-admin status fails', async () => {
+    listUsers.mockResolvedValue([pendingUser])
+    setPlatformAdmin.mockRejectedValue(new Error('boom'))
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('button', { name: 'Grant platform admin' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Failed to change platform-admin status.')
   })
 })

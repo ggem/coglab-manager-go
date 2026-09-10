@@ -210,8 +210,8 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 	return err
 }
 
-const setUserPlatformAdmin = `-- name: SetUserPlatformAdmin :exec
-update users set is_platform_admin = $1 where id = $2
+const setUserPlatformAdmin = `-- name: SetUserPlatformAdmin :one
+update users set is_platform_admin = $1 where id = $2 returning id, email, first_name, last_name, password_hash, is_platform_admin, created_at, updated_at, deactivated_at, sso_issuer, sso_subject
 `
 
 type SetUserPlatformAdminParams struct {
@@ -219,9 +219,25 @@ type SetUserPlatformAdminParams struct {
 	ID              int64 `json:"id"`
 }
 
-func (q *Queries) SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) error {
-	_, err := q.db.Exec(ctx, setUserPlatformAdmin, arg.IsPlatformAdmin, arg.ID)
-	return err
+// :one (RETURNING), not :exec, so granting/revoking admin on a
+// nonexistent id 404s instead of silently reporting success.
+func (q *Queries) SetUserPlatformAdmin(ctx context.Context, arg SetUserPlatformAdminParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserPlatformAdmin, arg.IsPlatformAdmin, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.PasswordHash,
+		&i.IsPlatformAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeactivatedAt,
+		&i.SsoIssuer,
+		&i.SsoSubject,
+	)
+	return i, err
 }
 
 const setUserSSOIdentity = `-- name: SetUserSSOIdentity :exec
