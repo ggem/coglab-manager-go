@@ -56,13 +56,14 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-// Drives the UI up to the create-user mini-form being visible: search for
-// a name, pick a permission role, submit, and get zero results.
+// Drives the UI up to the create-user mini-form being visible: search
+// for a name, get zero results (the role picker only appears once a
+// search has actually run), pick a permission role, then open the form.
 async function openCreateUserForm(typeUser: ReturnType<typeof userEvent.setup>) {
   searchUsersNotInLab.mockResolvedValue([])
   await typeUser.type(await screen.findByPlaceholderText('Search by name…'), 'Nonexistent Person')
-  await typeUser.selectOptions(screen.getByLabelText('Permission role'), 'staff')
   await typeUser.click(screen.getByRole('button', { name: 'Search' }))
+  await typeUser.selectOptions(await screen.findByLabelText('Permission role'), 'staff')
   await typeUser.click(await screen.findByRole('button', { name: 'Create new user' }))
 }
 
@@ -91,6 +92,21 @@ describe('LabMembers create-user-and-add flow', () => {
 
     expect(await screen.findByText('No matches.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create new user' })).toBeInTheDocument()
+  })
+
+  it('only shows the permission-role picker once a search has run, not alongside the search bar', async () => {
+    mockAsAdmin()
+    searchUsersNotInLab.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<LabMembers labId={9} />)
+    await screen.findByPlaceholderText('Search by name…')
+    expect(screen.queryByLabelText('Permission role')).not.toBeInTheDocument()
+
+    await typeUser.type(screen.getByPlaceholderText('Search by name…'), 'Nonexistent Person')
+    await typeUser.click(screen.getByRole('button', { name: 'Search' }))
+
+    expect(await screen.findByLabelText('Permission role')).toBeInTheDocument()
   })
 
   it('creates and adds a new user, closing the form and clearing search state on success', async () => {

@@ -311,20 +311,25 @@ export default function LabMembers({ labId }: Props) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name…"
             />
-            <select value={addRoleId} onChange={(e) => setAddRoleId(e.target.value)} aria-label="Permission role">
-              <option value="" disabled>
-                Permission role
-              </option>
-              {(roles ?? []).map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
             <button type="submit" disabled={searching || query.trim() === ''}>
               {searching ? 'Searching…' : 'Search'}
             </button>
           </form>
+          {searchResults !== null && (
+            <label className="lab-members-role-picker">
+              Permission role for the person you add
+              <select value={addRoleId} onChange={(e) => setAddRoleId(e.target.value)} aria-label="Permission role">
+                <option value="" disabled>
+                  Permission role
+                </option>
+                {(roles ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {searchResults && (
             <ul className="lab-members-search-results">
               {searchResults.length === 0 && (

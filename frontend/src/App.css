@@ -279,17 +279,22 @@ td {
 .family-fields form,
 .create-family form,
 .child-form,
-.experiment-form {
+.experiment-form,
+.admin-users form,
+.lab-members-create-user {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
   margin: 1rem 0;
+  align-items: flex-end;
 }
 
 .family-fields form label,
 .create-family form label,
 .child-form label,
-.experiment-form label {
+.experiment-form label,
+.admin-users form label,
+.lab-members-create-user label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -306,7 +311,9 @@ td {
 .child-form select,
 .child-form textarea,
 .experiment-form input,
-.experiment-form select {
+.experiment-form select,
+.admin-users form input,
+.lab-members-create-user input {
   padding: 0.4rem;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -321,9 +328,35 @@ td {
   .family-fields form label,
   .create-family form label,
   .child-form label,
-  .experiment-form label {
+  .experiment-form label,
+  .admin-users form label,
+  .lab-members-create-user label {
     width: 100%;
   }
+}
+
+/* Admin Users' "Grant platform admin" checkbox is a label of its own
+   too (for the shared rules above), but a checkbox shouldn't stretch to
+   the same 220px column-flex box everything else gets. */
+.admin-users form label:has(input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+}
+
+/* The permission-role picker sits below the search bar (not inside the
+   same row -- it used to be a third control in .lab-members-search,
+   which made it look like part of the search itself), and only appears
+   once a search has actually run, since there's nothing to assign a
+   role to before then. */
+.lab-members-role-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+  color: #555;
 }
 
 .child-form textarea {
