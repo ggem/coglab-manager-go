@@ -63,6 +63,7 @@ export interface User {
   email: string
   first_name: string
   last_name: string
+  is_platform_admin: boolean
 }
 
 export interface LoginResponse {
@@ -95,6 +96,91 @@ export interface SSOConfig {
 // from a 404 -- most deployments have no institutional IdP configured yet.
 export function getSSOConfig(): Promise<SSOConfig> {
   return apiFetch<SSOConfig>('/auth/sso/config')
+}
+
+// Redeems an account-creation invite link -- same response shape login()
+// returns, so the caller can hand the result straight to the same
+// onLogin callback LoginForm uses.
+export function setPassword(token: string, password: string): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/set-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
+}
+
+// The platform-admin Users page's roster -- every account in the
+// system, not scoped to one lab (has_password distinguishes an
+// activated account from one still waiting on its invite link).
+export interface AdminUser {
+  id: number
+  email: string
+  first_name: string
+  last_name: string
+  is_platform_admin: boolean
+  has_password: boolean
+  deactivated: boolean
+}
+
+export function listUsers(): Promise<AdminUser[]> {
+  return apiFetch<AdminUser[]>('/admin/users/')
+}
+
+export interface CreateUserInput {
+  email: string
+  first_name: string
+  last_name: string
+  is_platform_admin: boolean
+}
+
+// invite_email_sent distinguishes "created and notified" from "created,
+// but the person has no way to find out yet" -- resendInvite is the
+// recovery path when it comes back false.
+export interface CreateUserResult extends AdminUser {
+  invite_email_sent: boolean
+}
+
+export function createUser(input: CreateUserInput): Promise<CreateUserResult> {
+  return apiFetch<CreateUserResult>('/admin/users/', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export interface ResendInviteResult {
+  invite_email_sent: boolean
+}
+
+// Generates a fresh invite link and re-sends it -- the recovery path for
+// an account whose original invite email never arrived. Rejected by the
+// server for an already-activated account.
+export function resendInvite(userId: number): Promise<ResendInviteResult> {
+  return apiFetch<ResendInviteResult>(`/admin/users/${userId}/resend-invite`, {
+    method: 'POST',
+  })
+}
+
+export interface CreateLabMembershipForNewUserInput {
+  email: string
+  first_name: string
+  last_name: string
+  role_id: number
+}
+
+export interface CreateLabMembershipForNewUserResult extends SearchedUser {
+  invite_email_sent: boolean
+}
+
+// The lab-admin counterpart to createUser: creates a brand-new account
+// (for someone who's never used the app before, so isn't findable via
+// searchUsersNotInLab) and adds them to this lab in one step.
+export function createLabMembershipForNewUser(
+  labId: number,
+  input: CreateLabMembershipForNewUserInput,
+): Promise<CreateLabMembershipForNewUserResult> {
+  return apiFetch<CreateLabMembershipForNewUserResult>(`/labs/${labId}/memberships/new-user`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export interface ChildSearchResult {

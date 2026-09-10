@@ -32,14 +32,26 @@ const apiPaths = [
   '/newsletters',
   '/roles',
   '/auth',
+  '/admin',
 ]
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: Object.fromEntries(
-      apiPaths.map((path) => [path, { target: 'http://localhost:8080', changeOrigin: true }]),
-    ),
+    proxy: {
+      ...Object.fromEntries(apiPaths.map((path) => [path, { target: 'http://localhost:8080', changeOrigin: true }])),
+      // /set-password is unique: it's both a real SPA page (where the
+      // account-creation invite email's link lands, a GET for
+      // index.html) and the JSON endpoint that page's form POSTs to.
+      // bypass skips the proxy for anything but that POST, so the GET
+      // falls through to Vite's own SPA serving instead of 404ing
+      // against the Go router (which only has POST /set-password).
+      '/set-password': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        bypass: (req) => (req.method === 'POST' ? undefined : req.url),
+      },
+    },
   },
 })

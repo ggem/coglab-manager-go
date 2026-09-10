@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import LoginForm from './LoginForm'
+import SetPassword from './SetPassword'
 import Layout from './Layout'
 import ParticipantSearch from './ParticipantSearch'
 import LabPicker from './LabPicker'
@@ -12,6 +13,7 @@ import CreateExperiment from './CreateExperiment'
 import ExperimentDetail from './ExperimentDetail'
 import Availability from './Availability'
 import Reports from './Reports'
+import AdminUsers from './AdminUsers'
 import { getMe, type User } from './api'
 import './App.css'
 
@@ -30,9 +32,16 @@ function App() {
   }
 
   if (!data) {
-    return (
-      <LoginForm onLogin={(user: User) => queryClient.setQueryData(['me'], { user })} />
-    )
+    const onLogin = (user: User) => queryClient.setQueryData(['me'], { user })
+    // /set-password is reachable while logged out (it's how an
+    // invite link lands) -- checked directly against window.location
+    // rather than through <Routes>, since nothing below here is
+    // wrapped in a router match until after login, same as LoginForm's
+    // own ?sso_error=1 handling.
+    if (window.location.pathname === '/set-password') {
+      return <SetPassword onLogin={onLogin} />
+    }
+    return <LoginForm onLogin={onLogin} />
   }
 
   return (
@@ -61,6 +70,7 @@ function App() {
         <Route path="families" element={<Navigate to="/app/participants" replace />} />
         <Route path="families/new" element={<CreateFamily />} />
         <Route path="families/:familyId" element={<FamilyDetail />} />
+        <Route path="admin/users" element={<AdminUsers />} />
       </Route>
     </Routes>
   )

@@ -4,6 +4,7 @@ import AttachList from './AttachList'
 import {
   addLabMemberTraining,
   createLabMembership,
+  createLabMembershipForNewUser,
   errorMessage,
   getMe,
   listExperimentRoles,
@@ -84,6 +85,10 @@ export default function LabMembers({ labId }: Props) {
   const [addRoleId, setAddRoleId] = useState('')
   const [searchResults, setSearchResults] = useState<SearchedUser[] | null>(null)
   const [searching, setSearching] = useState(false)
+  const [showCreateUser, setShowCreateUser] = useState(false)
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserFirstName, setNewUserFirstName] = useState('')
+  const [newUserLastName, setNewUserLastName] = useState('')
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: membershipsQueryKey })
 
@@ -96,6 +101,31 @@ export default function LabMembers({ labId }: Props) {
       void invalidate()
     },
     onError: (err) => setActionError(errorMessage(err, 'Failed to add member.')),
+  })
+
+  const createUserMutation = useMutation({
+    mutationFn: () =>
+      createLabMembershipForNewUser(labId, {
+        email: newUserEmail,
+        first_name: newUserFirstName,
+        last_name: newUserLastName,
+        role_id: Number(addRoleId),
+      }),
+    onSuccess: (result) => {
+      setActionError(
+        result.invite_email_sent
+          ? null
+          : `${result.email} was added, but the invite email failed to send. A platform admin can resend it from the Users page.`,
+      )
+      setSearchResults(null)
+      setQuery('')
+      setShowCreateUser(false)
+      setNewUserEmail('')
+      setNewUserFirstName('')
+      setNewUserLastName('')
+      void invalidate()
+    },
+    onError: (err) => setActionError(errorMessage(err, 'Failed to create user.')),
   })
 
   const updateMutation = useMutation({
@@ -297,7 +327,16 @@ export default function LabMembers({ labId }: Props) {
           </form>
           {searchResults && (
             <ul className="lab-members-search-results">
-              {searchResults.length === 0 && <li>No matches.</li>}
+              {searchResults.length === 0 && (
+                <li>
+                  No matches.{' '}
+                  {!showCreateUser && (
+                    <button type="button" onClick={() => setShowCreateUser(true)}>
+                      Create new user
+                    </button>
+                  )}
+                </li>
+              )}
               {searchResults.map((u) => (
                 <li key={u.id}>
                   {u.first_name} {u.last_name} ({u.email})
@@ -311,6 +350,40 @@ export default function LabMembers({ labId }: Props) {
                 </li>
               ))}
             </ul>
+          )}
+          {showCreateUser && (
+            <form
+              className="lab-members-create-user"
+              onSubmit={(e) => {
+                e.preventDefault()
+                createUserMutation.mutate()
+              }}
+            >
+              <h5>Create a new user and add them to this lab</h5>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                First name
+                <input value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} required />
+              </label>
+              <label>
+                Last name
+                <input value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} required />
+              </label>
+              <button type="submit" disabled={createUserMutation.isPending || addRoleId === ''}>
+                {createUserMutation.isPending ? 'Creating…' : 'Create and add'}
+              </button>
+              <button type="button" onClick={() => setShowCreateUser(false)}>
+                Cancel
+              </button>
+            </form>
           )}
         </>
       ) : (

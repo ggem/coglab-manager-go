@@ -70,6 +70,7 @@ export default function Layout({ user }: Props) {
           >
             Reports
           </NavLink>
+          {user.is_platform_admin && <NavLink to="/app/admin/users">Users</NavLink>}
         </nav>
         <div className="header-user">
           {labId && labs && labs.length > 1 && (
