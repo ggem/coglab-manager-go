@@ -1,0 +1,75 @@
+# Production deployment stack. Unlike docker-compose.yml (local dev --
+# bare Postgres + Dex, apps run via `go run`/`npm run dev` on the host),
+# this builds and runs the whole thing: Postgres, the Go API, and nginx
+# serving the built frontend + proxying API paths to it (nginx here
+# plays the same role frontend/vite.config.ts's dev proxy plays in dev).
+#
+# No reverse proxy / TLS layer here on purpose -- the deploying host is
+# expected to already terminate TLS and forward to the `web` service's
+# published port, the way it already does for every other service on
+# that host. All real configuration (DB credentials, SMTP, MCDI, the
+# public base URL) comes from a .env file alongside this one; see
+# .env.prod.example.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SMTP_ADDR: ${SMTP_ADDR}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MCDI_API_URL: ${MCDI_API_URL}
+      MCDI_API_KEY: ${MCDI_API_KEY}
+      MCDI_TYPE_PARAM: ${MCDI_TYPE_PARAM:-}
+      APP_BASE_URL: ${APP_BASE_URL}
+      # Unused by the long-running api server itself -- only read by
+      # `docker compose run --entrypoint /app/import api` for the one-time
+      # legacy data import (see migrations/README.md's sibling doc for
+      # that workflow). Declared here so `run` can see it; empty is fine
+      # for normal `api` operation.
+      LEGACY_MYSQL_DSN: ${LEGACY_MYSQL_DSN:-}
+    # Lets the api container reach services published on the host itself
+    # (the real MCDI backend, and the legacy MySQL DB for cmd/import) at
+    # host.docker.internal, the same way MCDI_API_URL/LEGACY_MYSQL_DSN
+    # are pointed at it -- without joining those services' own compose
+    # networks.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8081:80"
+
+volumes:
+  pgdata:
