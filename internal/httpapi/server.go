@@ -133,6 +133,11 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/{userID}/platform-admin", s.handleSetPlatformAdmin)
 		})
 
+		r.Route("/admin/labs", func(r chi.Router) {
+			r.Use(s.requirePlatformAdmin)
+			r.Get("/", s.handleListLabs)
+		})
+
 		r.Route("/recruitment-sources", func(r chi.Router) {
 			r.Post("/", s.handleCreateRecruitmentSource)
 			r.Get("/", s.handleListRecruitmentSources)

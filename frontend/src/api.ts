@@ -130,6 +130,10 @@ export interface CreateUserInput {
   first_name: string
   last_name: string
   is_platform_admin: boolean
+  // Both-or-neither: a platform admin creating an account can optionally
+  // assign it to a lab at the same time.
+  lab_id?: number
+  role_id?: number
 }
 
 // invite_email_sent distinguishes "created and notified" from "created,
@@ -446,6 +450,13 @@ export interface Lab {
 // everything lab-scoped below, since nothing else lists lab IDs.
 export function getLabs(): Promise<Lab[]> {
   return apiFetch<Lab[]>('/labs')
+}
+
+// Every lab in the system, regardless of membership -- the platform-admin
+// "assign a lab" picker on the Users page needs this since the admin
+// creating an account may not belong to the lab they're assigning it to.
+export function listLabs(): Promise<Lab[]> {
+  return apiFetch<Lab[]>('/admin/labs/')
 }
 
 // --- Lab setup: conditions, equipment, experiment roles, protocols,

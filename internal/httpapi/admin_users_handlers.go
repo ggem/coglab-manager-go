@@ -61,6 +61,13 @@ type createUserRequest struct {
 	FirstName       string `json:"first_name"`
 	LastName        string `json:"last_name"`
 	IsPlatformAdmin bool   `json:"is_platform_admin"`
+	// LabID and RoleID are both-or-neither: a platform admin creating an
+	// account can optionally assign it to a lab at the same time, same
+	// one-step convenience handleCreateLabMembershipForNewUser already
+	// offers lab admins, just reachable without already belonging to the
+	// target lab.
+	LabID  *int64 `json:"lab_id"`
+	RoleID *int64 `json:"role_id"`
 }
 
 // createUserResponse reports whether the invite email actually went out,
@@ -97,6 +104,10 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "email, first_name, and last_name are required")
 		return
 	}
+	if (req.LabID == nil) != (req.RoleID == nil) {
+		writeError(w, http.StatusBadRequest, "lab_id and role_id must be set together")
+		return
+	}
 
 	var user db.User
 	var token string
@@ -113,20 +124,45 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		token, err = auth.CreateInviteToken(r.Context(), q, user.ID)
-		return err
+		if err != nil {
+			return err
+		}
+
+		recorder := audit.NewRecorder(q)
+		if err := recorder.Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			Action:      auth.ActionUserCreated,
+			EntityType:  ptr("user"),
+			EntityID:    &user.ID,
+			Metadata:    map[string]any{"email": user.Email, "is_platform_admin": user.IsPlatformAdmin},
+		}); err != nil {
+			return err
+		}
+
+		if req.LabID == nil {
+			return nil
+		}
+		membership, err := q.CreateLabMembership(r.Context(), db.CreateLabMembershipParams{
+			UserID: user.ID,
+			LabID:  *req.LabID,
+			RoleID: *req.RoleID,
+		})
+		if err != nil {
+			return err
+		}
+		return recorder.Record(r.Context(), audit.Event{
+			ActorUserID: currentUserID(r.Context()),
+			LabID:       req.LabID,
+			Action:      ActionLabMembershipCreated,
+			EntityType:  ptr("lab_membership"),
+			EntityID:    &membership.ID,
+			Metadata:    map[string]int64{"user_id": user.ID, "role_id": *req.RoleID},
+		})
 	})
 	if txErr != nil {
 		s.writeDBError(w, txErr)
 		return
 	}
-
-	s.recordAuditEvent(r, audit.Event{
-		ActorUserID: currentUserID(r.Context()),
-		Action:      auth.ActionUserCreated,
-		EntityType:  ptr("user"),
-		EntityID:    &user.ID,
-		Metadata:    map[string]any{"email": user.Email, "is_platform_admin": user.IsPlatformAdmin},
-	})
 
 	sent := s.sendInviteEmail(r.Context(), user, token)
 

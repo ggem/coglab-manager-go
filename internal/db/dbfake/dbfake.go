@@ -148,6 +148,7 @@ type Querier struct {
 	RemoveLabMembershipFunc                  func(ctx context.Context, arg db.RemoveLabMembershipParams) (db.LabMembership, error)
 	RemoveLabMemberTrainingsForUserInLabFunc func(ctx context.Context, arg db.RemoveLabMemberTrainingsForUserInLabParams) error
 	IsLabAdminFunc                           func(ctx context.Context, arg db.IsLabAdminParams) (bool, error)
+	ListLabsFunc                             func(ctx context.Context) ([]db.Lab, error)
 	SearchUsersNotInLabFunc                  func(ctx context.Context, arg db.SearchUsersNotInLabParams) ([]db.User, error)
 	ListRolesFunc                            func(ctx context.Context) ([]db.Role, error)
 
@@ -916,6 +917,13 @@ func (q *Querier) IsLabAdmin(ctx context.Context, arg db.IsLabAdminParams) (bool
 		panic("dbfake: IsLabAdmin not implemented")
 	}
 	return q.IsLabAdminFunc(ctx, arg)
+}
+
+func (q *Querier) ListLabs(ctx context.Context) ([]db.Lab, error) {
+	if q.ListLabsFunc == nil {
+		panic("dbfake: ListLabs not implemented")
+	}
+	return q.ListLabsFunc(ctx)
 }
 
 func (q *Querier) SearchUsersNotInLab(ctx context.Context, arg db.SearchUsersNotInLabParams) ([]db.User, error) {

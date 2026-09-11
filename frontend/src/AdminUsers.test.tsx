@@ -3,15 +3,17 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AdminUsers from './AdminUsers'
 import { renderWithProviders } from './test/renderWithProviders'
-import type { AdminUser, CreateUserResult, LoginResponse, ResendInviteResult } from './api'
+import type { AdminUser, CreateUserResult, Lab, LoginResponse, ResendInviteResult, Role } from './api'
 
-const { listUsers, createUser, resendInvite, getMe, deactivateUser, setPlatformAdmin } = vi.hoisted(() => ({
+const { listUsers, createUser, resendInvite, getMe, deactivateUser, setPlatformAdmin, listLabs, listRoles } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
   resendInvite: vi.fn(),
   getMe: vi.fn(),
   deactivateUser: vi.fn(),
   setPlatformAdmin: vi.fn(),
+  listLabs: vi.fn(),
+  listRoles: vi.fn(),
 }))
 
 vi.mock('./api', async (importOriginal) => ({
@@ -22,6 +24,8 @@ vi.mock('./api', async (importOriginal) => ({
   getMe,
   deactivateUser,
   setPlatformAdmin,
+  listLabs,
+  listRoles,
 }))
 
 // A caller distinct from every test fixture user below, so "this is my
@@ -57,8 +61,13 @@ const deactivatedUser: AdminUser = {
   deactivated: true,
 }
 
+const labFixture: Lab = { id: 9, name: 'Cognitive Development Center', short_name: 'CDC' }
+const roleFixture: Role = { id: 1, name: 'staff', description: 'Plain lab member' }
+
 beforeEach(() => {
   getMe.mockResolvedValue({ user: caller } satisfies LoginResponse)
+  listLabs.mockResolvedValue([labFixture])
+  listRoles.mockResolvedValue([roleFixture])
 })
 
 afterEach(() => {
@@ -137,6 +146,88 @@ describe('AdminUsers create form', () => {
     await typeUser.click(screen.getByRole('button', { name: 'Create user' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('no-email@example.edu was created, but the invite email failed to send')
+  })
+
+  it('rejects submitting a lab without a permission role', async () => {
+    listUsers.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await screen.findByText('No users yet.')
+    await typeUser.type(screen.getByLabelText('Email'), 'new-hire@example.edu')
+    await typeUser.type(screen.getByLabelText('First name'), 'New')
+    await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
+    await typeUser.selectOptions(screen.getByLabelText('Lab (optional)'), String(labFixture.id))
+    await typeUser.click(screen.getByRole('button', { name: 'Create user' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Select both a lab and a permission role')
+    expect(createUser).not.toHaveBeenCalled()
+  })
+
+  it('rejects submitting a permission role without a lab', async () => {
+    listUsers.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await screen.findByText('No users yet.')
+    await typeUser.type(screen.getByLabelText('Email'), 'new-hire@example.edu')
+    await typeUser.type(screen.getByLabelText('First name'), 'New')
+    await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
+    await typeUser.selectOptions(screen.getByLabelText('Permission role (optional)'), String(roleFixture.id))
+    await typeUser.click(screen.getByRole('button', { name: 'Create user' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Select both a lab and a permission role')
+    expect(createUser).not.toHaveBeenCalled()
+  })
+
+  it('creates a user with a lab and role assigned when both are selected', async () => {
+    listUsers.mockResolvedValue([])
+    createUser.mockResolvedValue({
+      id: 6,
+      email: 'lab-hire@example.edu',
+      first_name: 'Lab',
+      last_name: 'Hire',
+      is_platform_admin: false,
+      has_password: false,
+      deactivated: false,
+      invite_email_sent: true,
+    } satisfies CreateUserResult)
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await screen.findByText('No users yet.')
+    await typeUser.type(screen.getByLabelText('Email'), 'lab-hire@example.edu')
+    await typeUser.type(screen.getByLabelText('First name'), 'Lab')
+    await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
+    await typeUser.selectOptions(screen.getByLabelText('Lab (optional)'), String(labFixture.id))
+    await typeUser.selectOptions(screen.getByLabelText('Permission role (optional)'), String(roleFixture.id))
+    await typeUser.click(screen.getByRole('button', { name: 'Create user' }))
+
+    await waitFor(() =>
+      expect(createUser).toHaveBeenCalledWith(
+        expect.objectContaining({ lab_id: labFixture.id, role_id: roleFixture.id }),
+      ),
+    )
+  })
+
+  // Code-review finding: (labs ?? []) / (roles ?? []) made a failed
+  // lookup indistinguishable from "there are genuinely no labs/roles" --
+  // an admin could submit believing the lone "No lab" option was the
+  // only choice, silently creating a lab-less account. The selects must
+  // now disable and say so instead.
+  it('disables the lab/role pickers and shows an error when the lookups fail, instead of silently looking empty', async () => {
+    listUsers.mockResolvedValue([])
+    listLabs.mockRejectedValue(new Error('network error'))
+    listRoles.mockRejectedValue(new Error('network error'))
+
+    renderWithProviders(<AdminUsers />)
+    await screen.findByText('No users yet.')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load the lab/permission-role picker')
+    expect(screen.getByLabelText('Lab (optional)')).toBeDisabled()
+    expect(screen.getByLabelText('Lab (optional)')).toHaveTextContent('Failed to load labs')
+    expect(screen.getByLabelText('Permission role (optional)')).toBeDisabled()
+    expect(screen.getByLabelText('Permission role (optional)')).toHaveTextContent('Failed to load roles')
   })
 })
 

@@ -266,6 +266,12 @@ type Querier interface {
 	// returns -- that one's response shape is relied on elsewhere and
 	// shouldn't change.
 	ListLabMembershipsForLab(ctx context.Context, labID int64) ([]ListLabMembershipsForLabRow, error)
+	// Every lab in the system, regardless of membership -- unlike
+	// ListLabsForUser (lab_memberships.sql), this is for the
+	// platform-admin "assign a lab" picker, where the admin may not
+	// belong to the lab they're assigning someone else to. labs has no
+	// deactivated_at column, so there's nothing to filter out.
+	ListLabs(ctx context.Context) ([]Lab, error)
 	ListLabsForUser(ctx context.Context, userID int64) ([]Lab, error)
 	ListNewslettersByLab(ctx context.Context, labID int64) ([]Newsletter, error)
 	ListNotesByEntity(ctx context.Context, arg ListNotesByEntityParams) ([]Note, error)

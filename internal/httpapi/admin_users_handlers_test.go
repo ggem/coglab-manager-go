@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ggem/coglab-manager-go/internal/auth"
 	"github.com/ggem/coglab-manager-go/internal/db"
 	"github.com/ggem/coglab-manager-go/internal/db/dbfake"
 	"github.com/ggem/coglab-manager-go/internal/mail/mailfake"
@@ -110,6 +111,126 @@ func TestHandleCreateUser_Success(t *testing.T) {
 	sent := sender.Messages()
 	if len(sent) != 1 || sent[0].To != "new-hire@example.edu" {
 		t.Fatalf("Messages() = %+v, want one invite email to new-hire@example.edu", sent)
+	}
+}
+
+// TestHandleCreateUser_WithLabAssignment_Success proves the platform-admin
+// "assign a lab at creation" path: both lab_id and role_id set creates the
+// membership in the same transaction as the user and records both audit
+// events.
+func TestHandleCreateUser_WithLabAssignment_Success(t *testing.T) {
+	var capturedMembership db.CreateLabMembershipParams
+	var auditActions []string
+	q := &dbfake.Querier{
+		CreateUserFunc: func(ctx context.Context, arg db.CreateUserParams) (db.User, error) {
+			return db.User{ID: 42, Email: arg.Email, FirstName: arg.FirstName, LastName: arg.LastName}, nil
+		},
+		CreatePasswordSetTokenFunc: func(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error) {
+			return db.PasswordSetToken{ID: 1}, nil
+		},
+		CreateLabMembershipFunc: func(ctx context.Context, arg db.CreateLabMembershipParams) (db.LabMembership, error) {
+			capturedMembership = arg
+			return db.LabMembership{ID: 5, UserID: arg.UserID, LabID: arg.LabID, RoleID: arg.RoleID}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			auditActions = append(auditActions, arg.Action)
+			return db.AuditEvent{ID: 1}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+	s.mailer = &mailfake.Sender{}
+	s.appBaseURL = "http://localhost:5173"
+
+	labID, roleID := int64(9), int64(1)
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/", cookie, createUserRequest{
+		Email: "new-hire@example.edu", FirstName: "Barbara", LastName: "Liskov",
+		LabID: &labID, RoleID: &roleID,
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body)
+	}
+	if capturedMembership.UserID != 42 || capturedMembership.LabID != 9 || capturedMembership.RoleID != 1 {
+		t.Errorf("CreateLabMembership params = %+v", capturedMembership)
+	}
+	if len(auditActions) != 2 || auditActions[0] != auth.ActionUserCreated || auditActions[1] != ActionLabMembershipCreated {
+		t.Errorf("audit actions = %+v, want [%s %s]", auditActions, auth.ActionUserCreated, ActionLabMembershipCreated)
+	}
+}
+
+// TestHandleCreateUser_LabIDWithoutRoleID_BadRequest and its RoleID
+// counterpart below prove the both-or-neither validation: you can't
+// assign a lab without a role, or vice versa.
+func TestHandleCreateUser_LabIDWithoutRoleID_BadRequest(t *testing.T) {
+	q := &dbfake.Querier{
+		CreateUserFunc: func(ctx context.Context, arg db.CreateUserParams) (db.User, error) {
+			t.Fatal("CreateUser should not be called when lab_id/role_id validation fails")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	labID := int64(9)
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/", cookie, createUserRequest{
+		Email: "new-hire@example.edu", FirstName: "A", LastName: "B", LabID: &labID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleCreateUser_RoleIDWithoutLabID_BadRequest(t *testing.T) {
+	q := &dbfake.Querier{
+		CreateUserFunc: func(ctx context.Context, arg db.CreateUserParams) (db.User, error) {
+			t.Fatal("CreateUser should not be called when lab_id/role_id validation fails")
+			return db.User{}, nil
+		},
+	}
+	stubPlatformAdmin(q, 7, true)
+	s, cookie := newAuthenticatedTestServer(q, 7)
+
+	roleID := int64(1)
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/", cookie, createUserRequest{
+		Email: "new-hire@example.edu", FirstName: "A", LastName: "B", RoleID: &roleID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+// TestHandleCreateUser_LabAssignmentFailureRollsBackUser proves an invalid
+// lab_id/role_id (e.g. a foreign-key violation) fails the whole request
+// cleanly rather than leaving an orphaned, lab-less account -- same
+// transactional guarantee as TestHandleCreateUser_TokenCreationFailureRollsBackUser.
+func TestHandleCreateUser_LabAssignmentFailureRollsBackUser(t *testing.T) {
+	txQueries := &dbfake.Querier{
+		CreateUserFunc: func(ctx context.Context, arg db.CreateUserParams) (db.User, error) {
+			return db.User{ID: 42, Email: arg.Email, FirstName: arg.FirstName, LastName: arg.LastName}, nil
+		},
+		CreatePasswordSetTokenFunc: func(ctx context.Context, arg db.CreatePasswordSetTokenParams) (db.PasswordSetToken, error) {
+			return db.PasswordSetToken{ID: 1}, nil
+		},
+		CreateAuditEventFunc: func(ctx context.Context, arg db.CreateAuditEventParams) (db.AuditEvent, error) {
+			return db.AuditEvent{ID: 1}, nil
+		},
+		CreateLabMembershipFunc: func(ctx context.Context, arg db.CreateLabMembershipParams) (db.LabMembership, error) {
+			return db.LabMembership{}, &pgconn.PgError{Code: pgForeignKeyViolation}
+		},
+	}
+	stubPlatformAdmin(txQueries, 7, true)
+	s, cookie := newAuthenticatedTestServer(txQueries, 7)
+
+	labID, roleID := int64(999), int64(1)
+	rec := doRequest(t, s, http.MethodPost, "/admin/users/", cookie, createUserRequest{
+		Email: "new-hire@example.edu", FirstName: "A", LastName: "B", LabID: &labID, RoleID: &roleID,
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body)
 	}
 }
 
