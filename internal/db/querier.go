@@ -164,12 +164,19 @@ type Querier interface {
 	// children sharing its family_id) -- legacy's
 	// child-id->sibling-experiments.
 	ListAppointmentsBySiblings(ctx context.Context, childID int64) ([]ListAppointmentsBySiblingsRow, error)
-	// Pending, not-yet-reminded appointments starting at or before the given
-	// cutoff (now + lead time), with the family's representative (lowest-id)
-	// guardian -- same idiom ListEligibleFamiliesForNewsletter uses. A
-	// family with no guardians at all (guardian_email null) is left for the
-	// caller to skip and log, not silently dropped here.
-	ListAppointmentsDueForReminder(ctx context.Context, dueBefore pgtype.Timestamp) ([]ListAppointmentsDueForReminderRow, error)
+	// Pending, not-yet-reminded appointments starting between now and the
+	// given cutoff (now + lead time), with the family's representative
+	// (lowest-id) guardian -- same idiom ListEligibleFamiliesForNewsletter
+	// uses. A family with no guardians at all (guardian_email null) is left
+	// for the caller to skip and log, not silently dropped here.
+	//
+	// The lower bound matters: without it, any already-past 'pending'
+	// appointment with reminder_sent_at still null (every legacy-imported
+	// appointment, since the legacy schema had no such column) reads as
+	// "due" forever, since "past" is always <= due_before too -- caught
+	// live when the M10 import sent 52 reminder emails for appointments up
+	// to 17 years old.
+	ListAppointmentsDueForReminder(ctx context.Context, arg ListAppointmentsDueForReminderParams) ([]ListAppointmentsDueForReminderRow, error)
 	// Members already committed to a Pending appointment within this date
 	// range in this lab, with the date and time range they're busy -- one
 	// query for a whole multi-day search rather than one call per candidate

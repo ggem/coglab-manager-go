@@ -26,7 +26,10 @@ import (
 // A Send failure is logged and the pass continues to the next
 // appointment, same "at most once" reasoning as RunStaffDigest.
 func RunFamilyReminders(ctx context.Context, queries db.Querier, mailer mail.Sender, logger *slog.Logger, now time.Time, leadTime time.Duration) error {
-	due, err := queries.ListAppointmentsDueForReminder(ctx, pgtype.Timestamp{Time: now.Add(leadTime), Valid: true})
+	due, err := queries.ListAppointmentsDueForReminder(ctx, db.ListAppointmentsDueForReminderParams{
+		Now:       pgtype.Timestamp{Time: now, Valid: true},
+		DueBefore: pgtype.Timestamp{Time: now.Add(leadTime), Valid: true},
+	})
 	if err != nil {
 		return fmt.Errorf("list appointments due for reminder: %w", err)
 	}

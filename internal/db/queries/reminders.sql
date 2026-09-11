@@ -79,11 +79,18 @@ group by appointments.id, appointments.schedule_date, appointments.schedule_time
 order by appointments.schedule_date, appointments.schedule_time_start;
 
 -- name: ListAppointmentsDueForReminder :many
--- Pending, not-yet-reminded appointments starting at or before the given
--- cutoff (now + lead time), with the family's representative (lowest-id)
--- guardian -- same idiom ListEligibleFamiliesForNewsletter uses. A
--- family with no guardians at all (guardian_email null) is left for the
--- caller to skip and log, not silently dropped here.
+-- Pending, not-yet-reminded appointments starting between now and the
+-- given cutoff (now + lead time), with the family's representative
+-- (lowest-id) guardian -- same idiom ListEligibleFamiliesForNewsletter
+-- uses. A family with no guardians at all (guardian_email null) is left
+-- for the caller to skip and log, not silently dropped here.
+--
+-- The lower bound matters: without it, any already-past 'pending'
+-- appointment with reminder_sent_at still null (every legacy-imported
+-- appointment, since the legacy schema had no such column) reads as
+-- "due" forever, since "past" is always <= due_before too -- caught
+-- live when the M10 import sent 52 reminder emails for appointments up
+-- to 17 years old.
 select
     appointments.id as appointment_id,
     appointments.schedule_date,
@@ -114,6 +121,7 @@ left join lateral (
 ) as guardian on true
 where appointments.status = 'pending'
   and appointments.reminder_sent_at is null
+  and (appointments.schedule_date + appointments.schedule_time_start)::timestamp >= sqlc.arg(now)::timestamp
   and (appointments.schedule_date + appointments.schedule_time_start)::timestamp <= sqlc.arg(due_before)::timestamp
 order by appointments.schedule_date, appointments.schedule_time_start;
 

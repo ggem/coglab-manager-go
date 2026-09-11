@@ -53,9 +53,15 @@ left join lateral (
 ) as guardian on true
 where appointments.status = 'pending'
   and appointments.reminder_sent_at is null
-  and (appointments.schedule_date + appointments.schedule_time_start)::timestamp <= $1::timestamp
+  and (appointments.schedule_date + appointments.schedule_time_start)::timestamp >= $1::timestamp
+  and (appointments.schedule_date + appointments.schedule_time_start)::timestamp <= $2::timestamp
 order by appointments.schedule_date, appointments.schedule_time_start
 `
+
+type ListAppointmentsDueForReminderParams struct {
+	Now       pgtype.Timestamp `json:"now"`
+	DueBefore pgtype.Timestamp `json:"due_before"`
+}
 
 type ListAppointmentsDueForReminderRow struct {
 	AppointmentID     int64       `json:"appointment_id"`
@@ -69,13 +75,20 @@ type ListAppointmentsDueForReminderRow struct {
 	GuardianLastName  string      `json:"guardian_last_name"`
 }
 
-// Pending, not-yet-reminded appointments starting at or before the given
-// cutoff (now + lead time), with the family's representative (lowest-id)
-// guardian -- same idiom ListEligibleFamiliesForNewsletter uses. A
-// family with no guardians at all (guardian_email null) is left for the
-// caller to skip and log, not silently dropped here.
-func (q *Queries) ListAppointmentsDueForReminder(ctx context.Context, dueBefore pgtype.Timestamp) ([]ListAppointmentsDueForReminderRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsDueForReminder, dueBefore)
+// Pending, not-yet-reminded appointments starting between now and the
+// given cutoff (now + lead time), with the family's representative
+// (lowest-id) guardian -- same idiom ListEligibleFamiliesForNewsletter
+// uses. A family with no guardians at all (guardian_email null) is left
+// for the caller to skip and log, not silently dropped here.
+//
+// The lower bound matters: without it, any already-past 'pending'
+// appointment with reminder_sent_at still null (every legacy-imported
+// appointment, since the legacy schema had no such column) reads as
+// "due" forever, since "past" is always <= due_before too -- caught
+// live when the M10 import sent 52 reminder emails for appointments up
+// to 17 years old.
+func (q *Queries) ListAppointmentsDueForReminder(ctx context.Context, arg ListAppointmentsDueForReminderParams) ([]ListAppointmentsDueForReminderRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsDueForReminder, arg.Now, arg.DueBefore)
 	if err != nil {
 		return nil, err
 	}

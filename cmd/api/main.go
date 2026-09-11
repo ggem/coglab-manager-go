@@ -169,7 +169,13 @@ func newMailer() (mail.Sender, error) {
 // working regardless. But it's all-or-nothing: a partially-set
 // configuration (e.g. an issuer URL with no client secret) fails fast at
 // startup rather than silently running with SSO half-broken.
-func newOIDCAuthenticator(ctx context.Context, queries db.Querier) (*auth.OIDCAuthenticator, error) {
+//
+// Returns the auth.SSOAuthenticator interface, not the concrete
+// *auth.OIDCAuthenticator -- returning a typed nil *auth.OIDCAuthenticator
+// here and assigning it to Server.oidc (itself an interface field) would
+// produce a non-nil interface value wrapping a nil pointer, so
+// `s.oidc != nil` would be true even with SSO unconfigured.
+func newOIDCAuthenticator(ctx context.Context, queries db.Querier) (auth.SSOAuthenticator, error) {
 	cfg := auth.OIDCConfig{
 		IssuerURL:    os.Getenv("OIDC_ISSUER_URL"),
 		ClientID:     os.Getenv("OIDC_CLIENT_ID"),

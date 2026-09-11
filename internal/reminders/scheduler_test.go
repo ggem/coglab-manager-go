@@ -31,7 +31,7 @@ func TestScheduler_RunsBothLoopsAndStopsOnCancel(t *testing.T) {
 			digestRuns.Add(1)
 			return nil
 		},
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			reminderRuns.Add(1)
 			return nil, nil
 		},

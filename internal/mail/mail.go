@@ -42,6 +42,18 @@ func NewSMTPSender(addr, from string, auth smtp.Auth) *SMTPSender {
 }
 
 func (s *SMTPSender) Send(ctx context.Context, msg Message) error {
-	body := fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s", msg.To, msg.Subject, msg.Body)
-	return smtp.SendMail(s.addr, s.auth, s.from, []string{msg.To}, []byte(body))
+	return smtp.SendMail(s.addr, s.auth, s.from, []string{msg.To}, s.compose(msg))
+}
+
+// compose builds the RFC 5322 message smtp.SendMail transmits.
+// s.from is passed to smtp.SendMail separately too, but only as the
+// envelope MAIL FROM -- that's invisible to the recipient and to SPF/
+// DKIM/DMARC's From-header alignment check, which looks at the visible
+// header set here. A message with no From: header at all (this
+// function's own prior form) leaves the relay to fill one in however it
+// sees fit -- caught live when Gmail substituted its own account-level
+// default identity instead of s.from, and that substituted domain's
+// DMARC policy rejected the message outright.
+func (s *SMTPSender) compose(msg Message) []byte {
+	return []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", s.from, msg.To, msg.Subject, msg.Body))
 }

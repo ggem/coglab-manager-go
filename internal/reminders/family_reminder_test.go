@@ -16,7 +16,7 @@ import (
 
 func TestRunFamilyReminders_NoneDue_NoMail(t *testing.T) {
 	q := &dbfake.Querier{
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			return nil, nil
 		},
 	}
@@ -33,7 +33,7 @@ func TestRunFamilyReminders_NoneDue_NoMail(t *testing.T) {
 func TestRunFamilyReminders_DueAppointment_SendsAndMarksSent(t *testing.T) {
 	var marked int64
 	q := &dbfake.Querier{
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			return []db.ListAppointmentsDueForReminderRow{
 				{
 					AppointmentID:     99,
@@ -76,7 +76,7 @@ func TestRunFamilyReminders_DueAppointment_SendsAndMarksSent(t *testing.T) {
 
 func TestRunFamilyReminders_NoGuardianEmail_SkipsWithoutMarking(t *testing.T) {
 	q := &dbfake.Querier{
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			return []db.ListAppointmentsDueForReminderRow{
 				{AppointmentID: 99, GuardianEmail: ""},
 			}, nil
@@ -96,7 +96,7 @@ func TestRunFamilyReminders_NoGuardianEmail_SkipsWithoutMarking(t *testing.T) {
 
 func TestRunFamilyReminders_SendFailure_NotMarkedSent(t *testing.T) {
 	q := &dbfake.Querier{
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			return []db.ListAppointmentsDueForReminderRow{
 				{AppointmentID: 99, GuardianEmail: "parent@example.edu"},
 			}, nil
@@ -114,7 +114,7 @@ func TestRunFamilyReminders_SendFailure_NotMarkedSent(t *testing.T) {
 
 func TestRunFamilyReminders_QueryFailure(t *testing.T) {
 	q := &dbfake.Querier{
-		ListAppointmentsDueForReminderFunc: func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+		ListAppointmentsDueForReminderFunc: func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 			return nil, errors.New("connection reset by peer")
 		},
 	}

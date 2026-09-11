@@ -125,7 +125,7 @@ type Querier struct {
 	ListChangedAppointmentIDsSinceFunc      func(ctx context.Context, arg db.ListChangedAppointmentIDsSinceParams) ([]int64, error)
 	ListRecipientsForAppointmentsFunc       func(ctx context.Context, appointmentIDs []int64) ([]db.ListRecipientsForAppointmentsRow, error)
 	ListPendingAppointmentsForUserInLabFunc func(ctx context.Context, arg db.ListPendingAppointmentsForUserInLabParams) ([]db.ListPendingAppointmentsForUserInLabRow, error)
-	ListAppointmentsDueForReminderFunc      func(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error)
+	ListAppointmentsDueForReminderFunc      func(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error)
 	MarkAppointmentReminderSentFunc         func(ctx context.Context, id int64) error
 
 	CreateConditionFunc                func(ctx context.Context, arg db.CreateConditionParams) (db.Condition, error)
@@ -1368,11 +1368,11 @@ func (q *Querier) ListPendingAppointmentsForUserInLab(ctx context.Context, arg d
 	return q.ListPendingAppointmentsForUserInLabFunc(ctx, arg)
 }
 
-func (q *Querier) ListAppointmentsDueForReminder(ctx context.Context, dueBefore pgtype.Timestamp) ([]db.ListAppointmentsDueForReminderRow, error) {
+func (q *Querier) ListAppointmentsDueForReminder(ctx context.Context, arg db.ListAppointmentsDueForReminderParams) ([]db.ListAppointmentsDueForReminderRow, error) {
 	if q.ListAppointmentsDueForReminderFunc == nil {
 		panic("dbfake: ListAppointmentsDueForReminder not implemented")
 	}
-	return q.ListAppointmentsDueForReminderFunc(ctx, dueBefore)
+	return q.ListAppointmentsDueForReminderFunc(ctx, arg)
 }
 
 func (q *Querier) MarkAppointmentReminderSent(ctx context.Context, id int64) error {

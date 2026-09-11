@@ -19,28 +19,37 @@ import './App.css'
 
 function App() {
   const queryClient = useQueryClient()
+  const onLogin = (user: User) => queryClient.setQueryData(['me'], { user })
+
   // retry: false -- a 401 here just means "not logged in," not a
-  // transient failure worth retrying.
+  // transient failure worth retrying. Called unconditionally (Rules of
+  // Hooks) even though its result is ignored on /set-password below --
+  // its own harmless GET /me just goes unused on that path.
   const { data, isLoading } = useQuery({
     queryKey: ['me'],
     queryFn: getMe,
     retry: false,
   })
 
+  // /set-password is reachable regardless of session state -- checked
+  // directly against window.location rather than through <Routes>,
+  // since nothing below here is wrapped in a router match until after
+  // login, same as LoginForm's own ?sso_error=1 handling. Checked before
+  // the isLoading/data gate below (not just while logged out): an
+  // invite link must still work if the browser already has a session
+  // for another account (or the same not-yet-activated one, from an
+  // earlier partial attempt) -- otherwise it falls through to the
+  // authenticated <Routes> tree below, which has no /set-password route
+  // at all and silently renders nothing.
+  if (window.location.pathname === '/set-password') {
+    return <SetPassword onLogin={onLogin} />
+  }
+
   if (isLoading) {
     return <p className="loading">Loading…</p>
   }
 
   if (!data) {
-    const onLogin = (user: User) => queryClient.setQueryData(['me'], { user })
-    // /set-password is reachable while logged out (it's how an
-    // invite link lands) -- checked directly against window.location
-    // rather than through <Routes>, since nothing below here is
-    // wrapped in a router match until after login, same as LoginForm's
-    // own ?sso_error=1 handling.
-    if (window.location.pathname === '/set-password') {
-      return <SetPassword onLogin={onLogin} />
-    }
     return <LoginForm onLogin={onLogin} />
   }
 

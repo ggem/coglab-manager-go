@@ -2299,6 +2299,41 @@ func TestFamilyReminderFlow_Integration(t *testing.T) {
 		t.Fatalf("ScheduleAppointment: %v", err)
 	}
 
+	// A second, already-past appointment -- otherwise-identical (same
+	// family/guardian, 'pending', reminder_sent_at null) except its
+	// schedule datetime is behind `now`, not ahead of it. This is the
+	// exact shape the M10 legacy import produced en masse (20 years of
+	// historical 'pending' appointments with no reminder_sent_at, since
+	// the legacy schema had no such column) and that a missing lower
+	// bound on ListAppointmentsDueForReminder let through live: it sent
+	// 52 reminder emails for appointments up to 17 years old.
+	//
+	// A separate child (same family) avoids appointments_one_active_
+	// hold_per_child -- two unscheduled holds for the same child can't
+	// coexist, but that constraint has nothing to do with what this test
+	// is proving, so it's sidestepped rather than worked around.
+	pastChild, err := testQueries.CreateChild(ctx, db.CreateChildParams{
+		FamilyID: family.ID, FirstName: "Sibling", LastName: "Test", Sex: "unknown",
+		RaceEthnicity: []string{}, Languages: []string{}, Response: "unknown", CreatedByUserID: actor.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateChild (past): %v", err)
+	}
+	pastAppointment, err := testQueries.CreateAppointment(ctx, db.CreateAppointmentParams{
+		ExperimentID: experiment.ID, ChildID: pastChild.ID, Session: 1, SiblingComing: "unknown",
+	})
+	if err != nil {
+		t.Fatalf("CreateAppointment (past): %v", err)
+	}
+	past := now.Add(-2 * time.Hour)
+	if _, err := testQueries.ScheduleAppointment(ctx, db.ScheduleAppointmentParams{
+		ID: pastAppointment.ID, ScheduleDate: pgtype.Date{Time: time.Date(past.Year(), past.Month(), past.Day(), 0, 0, 0, 0, time.UTC), Valid: true},
+		ScheduleTimeStart: pgtype.Time{Microseconds: int64(past.Hour())*int64(time.Hour/time.Microsecond) + int64(past.Minute())*int64(time.Minute/time.Microsecond), Valid: true},
+		ScheduleTimeEnd:   pgtype.Time{Microseconds: int64(past.Hour())*int64(time.Hour/time.Microsecond) + int64(past.Minute())*int64(time.Minute/time.Microsecond) + int64(30*time.Minute/time.Microsecond), Valid: true},
+	}); err != nil {
+		t.Fatalf("ScheduleAppointment (past): %v", err)
+	}
+
 	sender := &mailfake.Sender{}
 	if err := reminders.RunFamilyReminders(ctx, testQueries, sender, discardLogger(), now, 24*time.Hour); err != nil {
 		t.Fatalf("RunFamilyReminders: %v", err)
@@ -2306,7 +2341,7 @@ func TestFamilyReminderFlow_Integration(t *testing.T) {
 
 	got := sender.Messages()
 	if len(got) != 1 {
-		t.Fatalf("Messages = %+v, want exactly one", got)
+		t.Fatalf("Messages = %+v, want exactly one (the past appointment must not generate a reminder)", got)
 	}
 	if got[0].To != guardianEmail {
 		t.Errorf("To = %q, want %q", got[0].To, guardianEmail)
@@ -2321,6 +2356,14 @@ func TestFamilyReminderFlow_Integration(t *testing.T) {
 	}
 	if !reminderSentAt.Valid {
 		t.Error("reminder_sent_at was not stamped")
+	}
+
+	var pastReminderSentAt pgtype.Timestamptz
+	if err := testPool.QueryRow(ctx, "select reminder_sent_at from appointments where id = $1", pastAppointment.ID).Scan(&pastReminderSentAt); err != nil {
+		t.Fatalf("query reminder_sent_at (past): %v", err)
+	}
+	if pastReminderSentAt.Valid {
+		t.Error("reminder_sent_at was stamped for a past appointment -- it should never be treated as due")
 	}
 
 	// A second run must not re-send: reminder_sent_at excludes it now.
