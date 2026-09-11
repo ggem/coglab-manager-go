@@ -48,6 +48,10 @@ export default function AdminUsers() {
   // only converted to CreateUserInput's lab_id/role_id on submit.
   const [labId, setLabId] = useState('')
   const [roleId, setRoleId] = useState('')
+  // Same default-hidden "Show deactivated" convention LookupTable.tsx
+  // uses -- most accounts here end up deactivated over time, and the
+  // roster is unusable once that list is long.
+  const [showDeactivated, setShowDeactivated] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
 
@@ -137,7 +141,7 @@ export default function AdminUsers() {
           </tr>
         </thead>
         <tbody>
-          {(users ?? []).map((u) => (
+          {(users ?? []).filter((u) => showDeactivated || !u.deactivated).map((u) => (
             <tr key={u.id}>
               <td>
                 {u.first_name} {u.last_name}
@@ -184,7 +188,13 @@ export default function AdminUsers() {
           ))}
         </tbody>
       </table>
-      {(users ?? []).length === 0 && <p>No users yet.</p>}
+      {(users ?? []).filter((u) => showDeactivated || !u.deactivated).length === 0 && (
+        <p>No {showDeactivated ? '' : 'active '}users yet.</p>
+      )}
+      <label className="show-deactivated">
+        <input type="checkbox" checked={showDeactivated} onChange={(e) => setShowDeactivated(e.target.checked)} />
+        Show deactivated
+      </label>
 
       <h3>Create user</h3>
       {validationError && (

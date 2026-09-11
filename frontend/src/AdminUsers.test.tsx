@@ -79,7 +79,7 @@ function rowFor(name: string) {
 }
 
 describe('AdminUsers roster', () => {
-  it('renders each account with its status and a Resend invite button only for pending accounts', async () => {
+  it('renders each active/pending account with its status and a Resend invite button only for pending accounts', async () => {
     listUsers.mockResolvedValue([activeUser, pendingUser, deactivatedUser])
 
     renderWithProviders(<AdminUsers />)
@@ -91,6 +91,19 @@ describe('AdminUsers roster', () => {
 
     expect(within(rowFor('Pending Person')).getByText('Invite pending')).toBeInTheDocument()
     expect(within(rowFor('Pending Person')).getByRole('button', { name: 'Resend invite' })).toBeInTheDocument()
+  })
+
+  it('hides deactivated accounts by default, and reveals them via "Show deactivated"', async () => {
+    listUsers.mockResolvedValue([activeUser, deactivatedUser])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<AdminUsers />)
+    await screen.findByText('active@example.edu')
+
+    expect(screen.queryByText('gone@example.edu')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Show deactivated' })).not.toBeChecked()
+
+    await typeUser.click(screen.getByRole('checkbox', { name: 'Show deactivated' }))
 
     expect(within(rowFor('Gone Person')).getByText('Deactivated')).toBeInTheDocument()
     expect(within(rowFor('Gone Person')).queryByRole('button', { name: 'Resend invite' })).not.toBeInTheDocument()
@@ -113,7 +126,7 @@ describe('AdminUsers create form', () => {
     const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
     await typeUser.type(screen.getByLabelText('Email'), 'new-hire@example.edu')
     await typeUser.type(screen.getByLabelText('First name'), 'New')
     await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
@@ -139,7 +152,7 @@ describe('AdminUsers create form', () => {
     const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
     await typeUser.type(screen.getByLabelText('Email'), 'no-email@example.edu')
     await typeUser.type(screen.getByLabelText('First name'), 'No')
     await typeUser.type(screen.getByLabelText('Last name'), 'Email')
@@ -153,7 +166,7 @@ describe('AdminUsers create form', () => {
     const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
     await typeUser.type(screen.getByLabelText('Email'), 'new-hire@example.edu')
     await typeUser.type(screen.getByLabelText('First name'), 'New')
     await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
@@ -169,7 +182,7 @@ describe('AdminUsers create form', () => {
     const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
     await typeUser.type(screen.getByLabelText('Email'), 'new-hire@example.edu')
     await typeUser.type(screen.getByLabelText('First name'), 'New')
     await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
@@ -195,7 +208,7 @@ describe('AdminUsers create form', () => {
     const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
     await typeUser.type(screen.getByLabelText('Email'), 'lab-hire@example.edu')
     await typeUser.type(screen.getByLabelText('First name'), 'Lab')
     await typeUser.type(screen.getByLabelText('Last name'), 'Hire')
@@ -221,7 +234,7 @@ describe('AdminUsers create form', () => {
     listRoles.mockRejectedValue(new Error('network error'))
 
     renderWithProviders(<AdminUsers />)
-    await screen.findByText('No users yet.')
+    await screen.findByText('No active users yet.')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load the lab/permission-role picker')
     expect(screen.getByLabelText('Lab (optional)')).toBeDisabled()
@@ -268,8 +281,10 @@ describe('AdminUsers deactivate action', () => {
 
   it('does not offer Deactivate on an already-deactivated row', async () => {
     listUsers.mockResolvedValue([deactivatedUser])
+    const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('checkbox', { name: 'Show deactivated' }))
 
     const row = await screen.findByText(deactivatedUser.email)
     expect(within(row.closest('tr')!).queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
@@ -325,8 +340,10 @@ describe('AdminUsers platform-admin action', () => {
 
   it('does not offer a platform-admin action on an already-deactivated row', async () => {
     listUsers.mockResolvedValue([deactivatedUser])
+    const typeUser = userEvent.setup()
 
     renderWithProviders(<AdminUsers />)
+    await typeUser.click(await screen.findByRole('checkbox', { name: 'Show deactivated' }))
 
     const row = await screen.findByText(deactivatedUser.email)
     expect(within(row.closest('tr')!).queryByRole('button', { name: /platform admin/ })).not.toBeInTheDocument()
