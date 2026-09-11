@@ -208,6 +208,17 @@ func (s *Server) Routes() http.Handler {
 					r.With(s.requireLabAdminFromURL).Put("/", s.handleUpdateLabMembership)
 					r.With(s.requireLabAdminFromURL).Delete("/", s.handleRemoveLabMembership)
 					r.Get("/trainings", s.handleListLabMemberTrainingsForUser)
+					r.Route("/availability", func(r chi.Router) {
+						r.Use(s.requireLabCoordinatorOrAdminFromURL)
+						r.Route("/general", func(r chi.Router) {
+							r.Post("/", s.handleCreateLabAvailabilityGeneralForUser)
+							r.Get("/", s.handleListLabAvailabilityGeneralForUser)
+						})
+						r.Route("/specific", func(r chi.Router) {
+							r.Post("/", s.handleCreateLabAvailabilitySpecificForUser)
+							r.Get("/", s.handleListLabAvailabilitySpecificForUser)
+						})
+					})
 				})
 			})
 			r.Route("/experiment-types", func(r chi.Router) {

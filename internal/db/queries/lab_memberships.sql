@@ -84,6 +84,19 @@ select exists (
       and roles.name = 'admin'
 );
 
+-- name: IsLabCoordinatorOrAdmin :one
+-- Backs requireLabCoordinatorOrAdminFromURL: managing another member's
+-- schedule (unlike declaring your own) requires the caller to hold
+-- this lab's "coordinator" or "admin" role -- a plain "staff" member
+-- can only ever manage their own availability.
+select exists (
+    select 1 from lab_memberships
+    join roles on roles.id = lab_memberships.role_id
+    where lab_memberships.user_id = sqlc.arg(user_id)
+      and lab_memberships.lab_id = sqlc.arg(lab_id)
+      and roles.name in ('coordinator', 'admin')
+);
+
 -- name: SearchUsersNotInLab :many
 -- Candidate pool for "add an existing person to this lab" -- same
 -- word_similarity name-matching pattern as SearchChildren/

@@ -62,6 +62,28 @@ func (s *Server) requireLabAdmin(w http.ResponseWriter, r *http.Request, labID i
 	return true
 }
 
+// requireLabCoordinatorOrAdmin verifies the current user holds this lab's
+// "coordinator" or "admin" permission role -- same 403 convention as
+// requireLabAdmin. Backs managing another member's availability, which
+// (unlike declaring your own) requires more than plain membership but
+// doesn't need full admin: a coordinator's whole job is scheduling.
+func (s *Server) requireLabCoordinatorOrAdmin(w http.ResponseWriter, r *http.Request, labID int64) bool {
+	userID, ok := s.requireCurrentUserID(w, r)
+	if !ok {
+		return false
+	}
+	isCoordinatorOrAdmin, err := s.queries.IsLabCoordinatorOrAdmin(r.Context(), db.IsLabCoordinatorOrAdminParams{UserID: userID, LabID: labID})
+	if err != nil {
+		s.writeDBError(w, err)
+		return false
+	}
+	if !isCoordinatorOrAdmin {
+		writeError(w, http.StatusForbidden, "coordinator or admin permission required")
+		return false
+	}
+	return true
+}
+
 // requirePlatformAdmin gates the system-wide (not lab-scoped) admin
 // routes -- creating a user account with no lab in view yet, listing
 // every user in the system. Same 403 convention as requireLabAdmin: the
@@ -102,6 +124,23 @@ func (s *Server) requireLabAdminFromURL(next http.Handler) http.Handler {
 			return
 		}
 		if !s.requireLabAdmin(w, r, labID) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireLabCoordinatorOrAdminFromURL gates the "manage another member's
+// availability" routes nested under /labs/{labID}/memberships/{userID}/
+// availability/... -- same shape as requireLabAdminFromURL, just checking
+// the lower coordinator-or-admin bar instead of admin.
+func (s *Server) requireLabCoordinatorOrAdminFromURL(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		labID, ok := idParam(w, r, "labID")
+		if !ok {
+			return
+		}
+		if !s.requireLabCoordinatorOrAdmin(w, r, labID) {
 			return
 		}
 		next.ServeHTTP(w, r)

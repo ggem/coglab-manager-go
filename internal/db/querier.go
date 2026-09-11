@@ -146,6 +146,11 @@ type Querier interface {
 	// permission role and priority, or removing them -- requires the caller
 	// to hold this lab's "admin" role, not just any membership.
 	IsLabAdmin(ctx context.Context, arg IsLabAdminParams) (bool, error)
+	// Backs requireLabCoordinatorOrAdminFromURL: managing another member's
+	// schedule (unlike declaring your own) requires the caller to hold
+	// this lab's "coordinator" or "admin" role -- a plain "staff" member
+	// can only ever manage their own availability.
+	IsLabCoordinatorOrAdmin(ctx context.Context, arg IsLabCoordinatorOrAdminParams) (bool, error)
 	ListActiveRecruitmentSources(ctx context.Context) ([]RecruitmentSource, error)
 	// Joined to users/experiment_roles for display -- a scheduled
 	// appointment's staff assignment is shown by name and role, not id.

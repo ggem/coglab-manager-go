@@ -11,15 +11,25 @@ import type { CreateLabMembershipForNewUserResult, LabMembership, Role } from '.
 // edit/remove, trainings via AttachList) is pre-existing surface not
 // covered by this pass.
 
-const { listLabMemberships, listRoles, getMe, searchUsersNotInLab, createLabMembershipForNewUser } = vi.hoisted(
-  () => ({
-    listLabMemberships: vi.fn(),
-    listRoles: vi.fn(),
-    getMe: vi.fn(),
-    searchUsersNotInLab: vi.fn(),
-    createLabMembershipForNewUser: vi.fn(),
-  }),
-)
+const {
+  listLabMemberships,
+  listRoles,
+  getMe,
+  searchUsersNotInLab,
+  createLabMembershipForNewUser,
+  listLabMemberTrainingsForUser,
+  listLabAvailabilityGeneralForUser,
+  listLabAvailabilitySpecificForUser,
+} = vi.hoisted(() => ({
+  listLabMemberships: vi.fn(),
+  listRoles: vi.fn(),
+  getMe: vi.fn(),
+  searchUsersNotInLab: vi.fn(),
+  createLabMembershipForNewUser: vi.fn(),
+  listLabMemberTrainingsForUser: vi.fn(),
+  listLabAvailabilityGeneralForUser: vi.fn(),
+  listLabAvailabilitySpecificForUser: vi.fn(),
+}))
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
@@ -28,6 +38,9 @@ vi.mock('./api', async (importOriginal) => ({
   getMe,
   searchUsersNotInLab,
   createLabMembershipForNewUser,
+  listLabMemberTrainingsForUser,
+  listLabAvailabilityGeneralForUser,
+  listLabAvailabilitySpecificForUser,
 }))
 
 const roles: Role[] = [
@@ -189,5 +202,61 @@ describe('LabMembers create-user-and-add flow', () => {
 
     expect(screen.queryByRole('button', { name: 'Create and add' })).not.toBeInTheDocument()
     expect(createLabMembershipForNewUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('LabMembers availability management', () => {
+  const coordinatorMembership: LabMembership = {
+    user_id: 2,
+    first_name: 'Coord',
+    last_name: 'Person',
+    email: 'coord@example.edu',
+    role_id: 2,
+    role_name: 'coordinator',
+    priority: 'lab_director',
+  }
+  const staffMembership: LabMembership = {
+    user_id: 3,
+    first_name: 'Staff',
+    last_name: 'Person',
+    email: 'staff@example.edu',
+    role_id: 1,
+    role_name: 'staff',
+    priority: 'undergrad_no_project',
+  }
+
+  it('shows the availability panel to a coordinator, not just admins', async () => {
+    getMe.mockResolvedValue({
+      user: { id: 2, email: 'coord@example.edu', first_name: 'Coord', last_name: 'Person', is_platform_admin: false },
+    })
+    listLabMemberships.mockResolvedValue([coordinatorMembership])
+    listRoles.mockResolvedValue(roles)
+    listLabMemberTrainingsForUser.mockResolvedValue([])
+    listLabAvailabilityGeneralForUser.mockResolvedValue([])
+    listLabAvailabilitySpecificForUser.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<LabMembers labId={9} />)
+    await typeUser.click(await screen.findByRole('button', { name: /Show training roles for Coord Person/ }))
+
+    expect(await screen.findByText('General availability')).toBeInTheDocument()
+    await waitFor(() => expect(listLabAvailabilityGeneralForUser).toHaveBeenCalledWith(9, 2))
+  })
+
+  it('hides the availability panel from a plain staff member', async () => {
+    getMe.mockResolvedValue({
+      user: { id: 3, email: 'staff@example.edu', first_name: 'Staff', last_name: 'Person', is_platform_admin: false },
+    })
+    listLabMemberships.mockResolvedValue([staffMembership])
+    listRoles.mockResolvedValue(roles)
+    listLabMemberTrainingsForUser.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<LabMembers labId={9} />)
+    await typeUser.click(await screen.findByRole('button', { name: /Show training roles for Staff Person/ }))
+
+    await screen.findByText('None attached yet.')
+    expect(screen.queryByText('General availability')).not.toBeInTheDocument()
+    expect(listLabAvailabilityGeneralForUser).not.toHaveBeenCalled()
   })
 })

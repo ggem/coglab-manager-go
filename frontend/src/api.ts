@@ -937,6 +937,46 @@ export function deactivateLabAvailabilitySpecific(id: number): Promise<void> {
   return apiFetch<void>(`/availability/specific/${id}/deactivate`, { method: 'POST' })
 }
 
+// --- Coordinator/admin management of another member's availability ---
+//
+// Same shape as the self-service functions above, but scoped to a target
+// member (labId/userId in the URL) instead of the caller -- only reachable
+// by a coordinator or admin of that lab. Deactivation reuses the existing
+// deactivateLabAvailabilityGeneral/Specific unchanged, since that's keyed
+// by row ID and the authz relaxation happens entirely server-side.
+
+export function listLabAvailabilityGeneralForUser(labId: number, userId: number): Promise<LabAvailabilityGeneral[]> {
+  return apiFetch<LabAvailabilityGeneral[]>(`/labs/${labId}/memberships/${userId}/availability/general/`)
+}
+export function createLabAvailabilityGeneralForUser(
+  labId: number,
+  userId: number,
+  weekday: number,
+  startTime: string,
+  endTime: string,
+): Promise<LabAvailabilityGeneral> {
+  return apiFetch<LabAvailabilityGeneral>(`/labs/${labId}/memberships/${userId}/availability/general/`, {
+    method: 'POST',
+    body: JSON.stringify({ weekday, start_time: startTime, end_time: endTime }),
+  })
+}
+
+export function listLabAvailabilitySpecificForUser(labId: number, userId: number): Promise<LabAvailabilitySpecific[]> {
+  return apiFetch<LabAvailabilitySpecific[]>(`/labs/${labId}/memberships/${userId}/availability/specific/`)
+}
+export function createLabAvailabilitySpecificForUser(
+  labId: number,
+  userId: number,
+  date: string,
+  startTime: string,
+  endTime: string,
+): Promise<LabAvailabilitySpecific> {
+  return apiFetch<LabAvailabilitySpecific>(`/labs/${labId}/memberships/${userId}/availability/specific/`, {
+    method: 'POST',
+    body: JSON.stringify({ date, start_time: startTime, end_time: endTime }),
+  })
+}
+
 // --- Schedule blockings ---
 //
 // Lab-wide closures (holidays, etc.) -- same create/list/deactivate-only

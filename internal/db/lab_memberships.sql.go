@@ -91,6 +91,32 @@ func (q *Queries) IsLabAdmin(ctx context.Context, arg IsLabAdminParams) (bool, e
 	return exists, err
 }
 
+const isLabCoordinatorOrAdmin = `-- name: IsLabCoordinatorOrAdmin :one
+select exists (
+    select 1 from lab_memberships
+    join roles on roles.id = lab_memberships.role_id
+    where lab_memberships.user_id = $1
+      and lab_memberships.lab_id = $2
+      and roles.name in ('coordinator', 'admin')
+)
+`
+
+type IsLabCoordinatorOrAdminParams struct {
+	UserID int64 `json:"user_id"`
+	LabID  int64 `json:"lab_id"`
+}
+
+// Backs requireLabCoordinatorOrAdminFromURL: managing another member's
+// schedule (unlike declaring your own) requires the caller to hold
+// this lab's "coordinator" or "admin" role -- a plain "staff" member
+// can only ever manage their own availability.
+func (q *Queries) IsLabCoordinatorOrAdmin(ctx context.Context, arg IsLabCoordinatorOrAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLabCoordinatorOrAdmin, arg.UserID, arg.LabID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listLabMembers = `-- name: ListLabMembers :many
 select users.id, users.email, users.first_name, users.last_name, users.password_hash, users.is_platform_admin, users.created_at, users.updated_at, users.deactivated_at, users.sso_issuer, users.sso_subject from users
 join lab_memberships on lab_memberships.user_id = users.id

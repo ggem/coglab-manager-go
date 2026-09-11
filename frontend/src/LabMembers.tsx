@@ -1,6 +1,7 @@
 import { Fragment, useState, type SubmitEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AttachList from './AttachList'
+import MemberAvailability from './MemberAvailability'
 import {
   addLabMemberTraining,
   createLabMembership,
@@ -74,6 +75,14 @@ export default function LabMembers({ labId }: Props) {
   // it, since viewing this page already required at least plain
   // membership) rather than a second request.
   const isAdmin = (memberships ?? []).some((m) => m.user_id === me?.user.id && m.role_name === 'admin')
+
+  // Separate from isAdmin: a coordinator's whole job is scheduling, so
+  // they can manage another member's availability without holding the
+  // full admin role that member-management (edit/remove, trainings)
+  // still requires.
+  const isCoordinatorOrAdmin = (memberships ?? []).some(
+    (m) => m.user_id === me?.user.id && (m.role_name === 'admin' || m.role_name === 'coordinator'),
+  )
 
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null)
   const [editingUserId, setEditingUserId] = useState<number | null>(null)
@@ -292,6 +301,7 @@ export default function LabMembers({ labId }: Props) {
                     ) : (
                       <MemberTrainingsReadOnly labId={labId} userId={m.user_id} />
                     )}
+                    {isCoordinatorOrAdmin && <MemberAvailability labId={labId} userId={m.user_id} />}
                   </td>
                 </tr>
               )}
