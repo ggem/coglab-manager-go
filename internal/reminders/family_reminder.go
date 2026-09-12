@@ -25,6 +25,16 @@ import (
 // nothing to lose track of across runs the way a global cursor could.
 // A Send failure is logged and the pass continues to the next
 // appointment, same "at most once" reasoning as RunStaffDigest.
+//
+// now is compared directly (via ListAppointmentsDueForReminder's WHERE
+// clause) against appointments.schedule_date/schedule_time_start,
+// naive columns holding the lab's own local wall-clock digits with no
+// timezone attached -- correct only when now's wall-clock digits
+// already ARE the lab's local time, i.e. the calling process's own
+// timezone matches the lab's. See cmd/api's requireTZ, which fails
+// startup if the process has no explicit TZ, to guard exactly this
+// assumption (a container defaulting to UTC previously misclassified
+// genuinely-future appointments as already past).
 func RunFamilyReminders(ctx context.Context, queries db.Querier, mailer mail.Sender, logger *slog.Logger, now time.Time, leadTime time.Duration) error {
 	due, err := queries.ListAppointmentsDueForReminder(ctx, db.ListAppointmentsDueForReminderParams{
 		Now:       pgtype.Timestamp{Time: now, Valid: true},

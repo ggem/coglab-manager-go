@@ -20,6 +20,12 @@ const familyReminderScanInterval = 30 * time.Minute
 // replacing legacy's external cron+curl with two in-process goroutines.
 // It has no logic of its own beyond timing -- see digest.go/
 // family_reminder.go for what each pass actually does.
+//
+// Both passes compare the process's own local time against appointment
+// schedule columns holding the lab's local wall-clock digits with no
+// timezone attached -- correct only when the process's timezone matches
+// the lab's. See cmd/api's requireTZ, which fails startup rather than
+// let that silently default to UTC.
 type Scheduler struct {
 	queries    db.Querier
 	mailer     mail.Sender

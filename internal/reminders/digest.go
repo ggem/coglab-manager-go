@@ -73,6 +73,12 @@ func RunStaffDigest(ctx context.Context, queries db.Querier, mailer mail.Sender,
 			return fmt.Errorf("list digest recipients: %w", err)
 		}
 
+		// now.Location() matters here: schedule_date is a naive column
+		// holding the lab's own local wall-clock digits, with no
+		// timezone attached. This derives "today" correctly only when
+		// the process's own local time already IS the lab's local time
+		// -- see cmd/api's requireTZ, which fails startup if the
+		// process has no explicit TZ, to guard exactly this assumption.
 		today := pgtype.Date{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), Valid: true}
 		for _, recipient := range recipients {
 			pending, err := queries.ListPendingAppointmentsForUserInLab(ctx, db.ListPendingAppointmentsForUserInLabParams{

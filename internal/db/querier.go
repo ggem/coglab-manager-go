@@ -176,6 +176,11 @@ type Querier interface {
 	// "due" forever, since "past" is always <= due_before too -- caught
 	// live when the M10 import sent 52 reminder emails for appointments up
 	// to 17 years old.
+	//
+	// Both bounds assume `now` (bound from Go's time.Now(), see
+	// RunFamilyReminders) is already in the lab's own local timezone, same
+	// as schedule_date/schedule_time_start themselves (naive columns, no
+	// timezone attached) -- see cmd/api's requireTZ.
 	ListAppointmentsDueForReminder(ctx context.Context, arg ListAppointmentsDueForReminderParams) ([]ListAppointmentsDueForReminderRow, error)
 	// Members already committed to a Pending appointment within this date
 	// range in this lab, with the date and time range they're busy -- one

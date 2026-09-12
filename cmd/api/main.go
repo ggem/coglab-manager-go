@@ -101,6 +101,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := requireTZ(); err != nil {
+		return err
+	}
 	scheduler := reminders.NewScheduler(queries, mailer, logger, leadTime, hour)
 	scheduler.Run(ctx)
 
@@ -231,6 +234,41 @@ func digestHour() (int, error) {
 		return 0, fmt.Errorf("invalid DIGEST_HOUR %q: must be an integer 0-23", v)
 	}
 	return hour, nil
+}
+
+// requireTZ fails fast if the process has no explicit, valid timezone,
+// rather than silently defaulting to UTC. digestHour's daily-alignment
+// calculation and ListAppointmentsDueForReminder's due-date comparison
+// both compare process-local "now" directly against appointments.
+// schedule_date/schedule_time_start, which are naive columns holding
+// the lab's own local wall-clock digits with no timezone attached --
+// correct only when the process's own local time already IS the lab's
+// local time. This has always been true by coincidence in local dev
+// (developer's machine already in the lab's own timezone), but a
+// container defaults to UTC unless told otherwise: caught live when
+// that silently misclassified genuinely-future appointments as already
+// past.
+//
+// time.LoadLocation(tz) is a real, if imperfect, validation: it fails
+// exactly the same lookup Go's own runtime does to resolve TZ into
+// time.Local (same tzdata database, installed in the api image
+// specifically so this lookup -- and TZ itself -- works at all), so a
+// typo'd or nonexistent zone name is caught here rather than silently
+// falling back to UTC the same way an entirely-unset TZ would. It can't
+// verify the *correct* zone was chosen (matching the lab's actual
+// location) -- that's still a deployment concern, not something a
+// syntax check can catch. Also handles TZ="" explicitly: LoadLocation("")
+// is specced to succeed as an alias for UTC, which would otherwise let
+// an unset-in-practice TZ slip past this check silently, defeating it.
+func requireTZ() error {
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		return fmt.Errorf("TZ environment variable is required (e.g. America/Denver, matching the lab's local timezone) -- see requireTZ's doc comment for why")
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return fmt.Errorf("invalid TZ %q: %w", tz, err)
+	}
+	return nil
 }
 
 func addr() string {

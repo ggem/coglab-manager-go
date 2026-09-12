@@ -87,6 +87,11 @@ type ListAppointmentsDueForReminderRow struct {
 // "due" forever, since "past" is always <= due_before too -- caught
 // live when the M10 import sent 52 reminder emails for appointments up
 // to 17 years old.
+//
+// Both bounds assume `now` (bound from Go's time.Now(), see
+// RunFamilyReminders) is already in the lab's own local timezone, same
+// as schedule_date/schedule_time_start themselves (naive columns, no
+// timezone attached) -- see cmd/api's requireTZ.
 func (q *Queries) ListAppointmentsDueForReminder(ctx context.Context, arg ListAppointmentsDueForReminderParams) ([]ListAppointmentsDueForReminderRow, error) {
 	rows, err := q.db.Query(ctx, listAppointmentsDueForReminder, arg.Now, arg.DueBefore)
 	if err != nil {

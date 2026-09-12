@@ -38,6 +38,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # Required (cmd/api's own requireTZ fails startup otherwise): the
+      # scheduler compares process-local time directly against naive
+      # schedule_date/schedule_time_start columns holding the lab's own
+      # local wall-clock digits, with no timezone conversion anywhere --
+      # correct only when this matches the lab's actual timezone. A
+      # container defaults to UTC unless told otherwise.
+      TZ: ${TZ}
       DATABASE_URL: ${DATABASE_URL}
       SMTP_ADDR: ${SMTP_ADDR}
       SMTP_FROM: ${SMTP_FROM}
