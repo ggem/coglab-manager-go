@@ -192,6 +192,11 @@ export default function LabSetup() {
           list={() => listScheduleBlockings(id)}
           create={(v) => createScheduleBlocking(id, v.date, v.start_time, v.end_time, v.reason)}
           remove={deactivateScheduleBlocking}
+          defaultFilter={{
+            keep: (b) => b.date >= oneWeekAgo(),
+            showAllLabel: 'Show all blockings',
+            emptyText: 'No blockings from the past week onward.',
+          }}
         />
       )}
 
@@ -199,6 +204,16 @@ export default function LabSetup() {
       </div>
     </div>
   )
+}
+
+// YYYY-MM-DD for 7 days before today, in the browser's local time (not
+// toISOString, which is UTC and can be off by a day). Blocking dates use
+// the same format, so plain string comparison orders them correctly.
+function oneWeekAgo(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 7)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 // Roles gets its own small wrapper rather than an inline LookupTable

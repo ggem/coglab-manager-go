@@ -41,13 +41,24 @@ interface Props<T extends Row> {
   list: () => Promise<T[]>
   create: (values: Record<string, string>) => Promise<T>
   remove: (id: number) => Promise<void>
+  // Optional default-on row filter with a checkbox to turn it off -- e.g.
+  // schedule blockings hide old dates unless "Show all" is ticked.
+  defaultFilter?: { keep: (row: T) => boolean; showAllLabel: string; emptyText: string }
 }
 
-export default function CreateDeleteList<T extends Row>({ queryKey, fields, list, create, remove }: Props<T>) {
+export default function CreateDeleteList<T extends Row>({
+  queryKey,
+  fields,
+  list,
+  create,
+  remove,
+  defaultFilter,
+}: Props<T>) {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({ queryKey, queryFn: list })
   const [newValues, setNewValues] = useState<Record<string, string>>(emptyValues(fields))
   const [actionError, setActionError] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey })
 
@@ -84,7 +95,8 @@ export default function CreateDeleteList<T extends Row>({ queryKey, fields, list
     )
   }
 
-  const rows = data ?? []
+  const filtering = defaultFilter !== undefined && !showAll
+  const rows = (data ?? []).filter((row) => !filtering || defaultFilter.keep(row))
 
   return (
     <div className="lookup-table">
@@ -121,7 +133,13 @@ export default function CreateDeleteList<T extends Row>({ queryKey, fields, list
           ))}
         </tbody>
       </table>
-      {rows.length === 0 && <p>None yet.</p>}
+      {rows.length === 0 && <p>{filtering ? defaultFilter.emptyText : 'None yet.'}</p>}
+      {defaultFilter && (
+        <label className="show-deactivated">
+          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+          {defaultFilter.showAllLabel}
+        </label>
+      )}
       <form onSubmit={handleCreate} className="lookup-table-add">
         {fields.map((f) =>
           f.type === 'select' ? (
