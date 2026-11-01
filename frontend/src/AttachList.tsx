@@ -25,6 +25,9 @@ interface Props<T extends Item> {
   remove: (id: number) => Promise<void>
   label: (item: T) => string
   addLabel: string
+  // Shown when nothing is attached; defaults to a generic message, so
+  // pages without a heading can say what's missing.
+  emptyText?: string
 }
 
 export default function AttachList<T extends Item>({
@@ -35,6 +38,7 @@ export default function AttachList<T extends Item>({
   remove,
   label,
   addLabel,
+  emptyText = 'None attached yet.',
 }: Props<T>) {
   const queryClient = useQueryClient()
   const { data: attached, isLoading, error } = useQuery({ queryKey, queryFn: list })
@@ -87,7 +91,7 @@ export default function AttachList<T extends Item>({
         </p>
       )}
       {(attached ?? []).length === 0 ? (
-        <p>None attached yet.</p>
+        <p>{emptyText}</p>
       ) : (
         <ul>
           {(attached ?? []).map((item) => (

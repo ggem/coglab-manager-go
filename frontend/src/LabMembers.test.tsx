@@ -20,6 +20,7 @@ const {
   listLabMemberTrainingsForUser,
   listLabAvailabilityGeneralForUser,
   listLabAvailabilitySpecificForUser,
+  listExperimentRoles,
 } = vi.hoisted(() => ({
   listLabMemberships: vi.fn(),
   listRoles: vi.fn(),
@@ -29,6 +30,7 @@ const {
   listLabMemberTrainingsForUser: vi.fn(),
   listLabAvailabilityGeneralForUser: vi.fn(),
   listLabAvailabilitySpecificForUser: vi.fn(),
+  listExperimentRoles: vi.fn(),
 }))
 
 vi.mock('./api', async (importOriginal) => ({
@@ -41,6 +43,7 @@ vi.mock('./api', async (importOriginal) => ({
   listLabMemberTrainingsForUser,
   listLabAvailabilityGeneralForUser,
   listLabAvailabilitySpecificForUser,
+  listExperimentRoles,
 }))
 
 const roles: Role[] = [
@@ -243,6 +246,22 @@ describe('LabMembers availability management', () => {
     await waitFor(() => expect(listLabAvailabilityGeneralForUser).toHaveBeenCalledWith(9, 2))
   })
 
+  it('labels an admin\'s empty trained-roles list as trained roles', async () => {
+    mockAsAdmin()
+    listLabMemberTrainingsForUser.mockResolvedValue([])
+    listExperimentRoles.mockResolvedValue([])
+    listLabAvailabilityGeneralForUser.mockResolvedValue([])
+    listLabAvailabilitySpecificForUser.mockResolvedValue([])
+    const typeUser = userEvent.setup()
+
+    renderWithProviders(<LabMembers labId={9} />)
+    await typeUser.click(await screen.findByRole('button', { name: /Show training roles for Admin Person/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Trained roles' })).toBeInTheDocument()
+    expect(await screen.findByText('No trained roles yet.')).toBeInTheDocument()
+    expect(screen.queryByText('None attached yet.')).not.toBeInTheDocument()
+  })
+
   it('hides the availability panel from a plain staff member', async () => {
     getMe.mockResolvedValue({
       user: { id: 3, email: 'staff@example.edu', first_name: 'Staff', last_name: 'Person', is_platform_admin: false },
@@ -255,7 +274,8 @@ describe('LabMembers availability management', () => {
     renderWithProviders(<LabMembers labId={9} />)
     await typeUser.click(await screen.findByRole('button', { name: /Show training roles for Staff Person/ }))
 
-    await screen.findByText('None attached yet.')
+    expect(await screen.findByRole('heading', { name: 'Trained roles' })).toBeInTheDocument()
+    await screen.findByText('No trained roles yet.')
     expect(screen.queryByText('General availability')).not.toBeInTheDocument()
     expect(listLabAvailabilityGeneralForUser).not.toHaveBeenCalled()
   })

@@ -39,12 +39,14 @@ interface Props {
 // otherwise the "read-only view" for non-admins would be incomplete,
 // showing member-management controls hidden but training-management
 // controls still live.
+const NO_TRAINED_ROLES = 'No trained roles yet.'
+
 function MemberTrainingsReadOnly({ labId, userId }: { labId: number; userId: number }) {
   const { data: trainings } = useQuery({
     queryKey: ['lab-member-trainings', labId, userId],
     queryFn: () => listLabMemberTrainingsForUser(labId, userId),
   })
-  if (!trainings || trainings.length === 0) return <p>None attached yet.</p>
+  if (!trainings || trainings.length === 0) return <p>{NO_TRAINED_ROLES}</p>
   return (
     <ul>
       {trainings.map((r) => (
@@ -288,6 +290,7 @@ export default function LabMembers({ labId }: Props) {
               {expandedUserId === m.user_id && (
                 <tr className="expanded-row">
                   <td colSpan={6} id={`member-trainings-${m.user_id}`}>
+                    <h3>Trained roles</h3>
                     {isAdmin ? (
                       <AttachList
                         queryKey={['lab-member-trainings', labId, m.user_id]}
@@ -297,6 +300,7 @@ export default function LabMembers({ labId }: Props) {
                         remove={(roleId) => removeLabMemberTraining(roleId, m.user_id)}
                         label={(r) => r.name}
                         addLabel="Add a trained role…"
+                        emptyText={NO_TRAINED_ROLES}
                       />
                     ) : (
                       <MemberTrainingsReadOnly labId={labId} userId={m.user_id} />
