@@ -1,6 +1,11 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import CreateDeleteList from './CreateDeleteList'
+import MemberAvailability from './MemberAvailability'
 import {
+  getMe,
+  listLabMemberships,
   createLabAvailabilityGeneral,
   createLabAvailabilitySpecific,
   deactivateLabAvailabilityGeneral,
@@ -24,9 +29,52 @@ const WEEKDAY_OPTIONS = [
 export default function Availability() {
   const { labId } = useParams<{ labId: string }>()
   const id = Number(labId)
+  // '' means "myself" -- the self-service view every member gets.
+  const [targetUserId, setTargetUserId] = useState('')
+
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe })
+  const { data: memberships } = useQuery({
+    queryKey: ['lab-memberships', id],
+    queryFn: () => listLabMemberships(id),
+  })
+
+  // Coordinators and admins can also manage other members' availability
+  // (the server enforces this; see requireLabCoordinatorOrAdminFromURL).
+  // The same editor also lives in Lab Setup -> Members, but this page is
+  // where a coordinator naturally looks for it.
+  const isCoordinatorOrAdmin = (memberships ?? []).some(
+    (m) => m.user_id === me?.user.id && (m.role_name === 'admin' || m.role_name === 'coordinator'),
+  )
+  const others = (memberships ?? [])
+    .filter((m) => m.user_id !== me?.user.id)
+    .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`))
+
+  const picker = isCoordinatorOrAdmin && (
+    <label className="availability-member-picker">
+      Whose availability
+      <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)}>
+        <option value="">Myself</option>
+        {others.map((m) => (
+          <option key={m.user_id} value={String(m.user_id)}>
+            {m.last_name}, {m.first_name}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
+  if (isCoordinatorOrAdmin && targetUserId !== '') {
+    return (
+      <div className="availability">
+        {picker}
+        <MemberAvailability key={targetUserId} labId={id} userId={Number(targetUserId)} />
+      </div>
+    )
+  }
 
   return (
     <div className="availability">
+      {picker}
       <h2>General availability</h2>
       <p>Hours you're available every week, on a recurring basis.</p>
       <CreateDeleteList<LabAvailabilityGeneral>

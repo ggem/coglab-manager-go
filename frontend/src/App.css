@@ -350,7 +350,9 @@ td {
    which made it look like part of the search itself), and only appears
    once a search has actually run, since there's nothing to assign a
    role to before then. */
-.lab-members-role-picker {
+/* Coordinator/admin-only: choose whose availability the page edits. */
+.lab-members-role-picker,
+.availability-member-picker {
   display: flex;
   align-items: center;
   gap: 0.5rem;
